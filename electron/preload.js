@@ -50,4 +50,7 @@ contextBridge.exposeInMainWorld("optionsDetective", {
   icsHoldings: (ticker) => ipcRenderer.invoke("api:ics:holdings", { ticker }),
   icsBatch: (payload) => ipcRenderer.invoke("api:ics:batch", payload),
   marketPulse: (watch) => ipcRenderer.invoke("api:market:pulse", { watch }),
+  archiveStatus: () => ipcRenderer.invoke("api:archive:status"),
+  archiveSnapshot: (body) => ipcRenderer.invoke("api:archive:snapshot", body),
+  archiveSettings: (body) => ipcRenderer.invoke("api:archive:settings", body),
 });

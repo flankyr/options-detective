@@ -9,6 +9,7 @@ Python installation:
     od-math.exe etf_metrics         ETF screener metrics: JSON on stdin
     od-math.exe etf_holdings        ETF top-holdings fetch: JSON on stdin
     od-math.exe market_pulse        sidebar quotes + news: JSON on stdin
+    od-math.exe archive             daily chain snapshots: JSON on stdin
 
 One executable for all entry points keeps a single copy of numpy/scipy in
 the bundle. Exit codes mirror the dev-mode scripts: 0 whenever a JSON
@@ -36,8 +37,11 @@ def main() -> int:
     if command == "market_pulse":
         import market_pulse
         return market_pulse.main()
+    if command == "archive":
+        import archive
+        return archive.main()
     json.dump({"ok": False,
-               "error": "usage: od-math [engine [--serve] | market_data | etf_metrics | etf_holdings | market_pulse]"},
+               "error": "usage: od-math [engine [--serve] | market_data | etf_metrics | etf_holdings | market_pulse | archive]"},
               sys.stdout)
     sys.stdout.write("\n")
     return 2

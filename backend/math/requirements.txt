@@ -1,3 +1,5 @@
 numpy>=1.26
 scipy>=1.11
-pytest>=8.0
+pandas>=2.2
+pyarrow>=16
+yfinance>=0.2.50

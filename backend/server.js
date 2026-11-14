@@ -12,6 +12,8 @@ const screenerRouter = require("./routes/screener");
 const marketRouter = require("./routes/market");
 const { router: authRouter, requireAccount } = require("./routes/auth");
 const accountRouter = require("./routes/account");
+const archiveRouter = require("./routes/archive");
+const { archiveService } = require("./services/archive");
 const { callEngine, engineClient } = require("./services/mathEngine");
 
 const app = express();
@@ -53,6 +55,7 @@ app.use("/etf-screener", requireAccount, etfRouter);
 app.use("/account", requireAccount, accountRouter); // v1.7.2 backup/restore
 app.use("/screener", screenerRouter);
 app.use("/market", marketRouter);
+app.use("/archive", archiveRouter); // Phase 0: daily chain snapshots
 
 // JSON everywhere: unknown routes and unhandled errors never leak HTML.
 app.use((req, res) => {
@@ -70,7 +73,9 @@ if (require.main === module) {
   const server = app.listen(PORT, () => {
     console.log(`options-detective backend listening on http://localhost:${PORT}`);
   });
+  archiveService.start(); // snapshots the watchlist after the close when missing
   const shutdown = () => {
+    archiveService.stop();
     engineClient.shutdown(); // stop the warm Python child
     server.close(() => process.exit(0));
     setTimeout(() => process.exit(0), 2_000).unref();

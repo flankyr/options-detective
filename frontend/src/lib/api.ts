@@ -53,6 +53,9 @@ type Bridge = {
   icsHoldings?: (ticker: string) => Promise<HoldingsInfo>;
   icsBatch?: (body: unknown) => Promise<IcsResult>;
   marketPulse?: (watch: string) => Promise<MarketPulse>;
+  archiveStatus?: () => Promise<ArchiveStatus>;
+  archiveSnapshot?: (body: { force?: boolean; symbols?: string[] }) => Promise<ArchiveRunResult>;
+  archiveSettings?: (body: Partial<ArchiveSettings>) => Promise<ArchiveSettings>;
 };
 
 // v1.5.0: process() now also returns assignment events + holdings snapshot
@@ -83,6 +86,32 @@ export interface AccountBackup {
   exportedAt: string;
   data: { trades: unknown; paper: unknown; etf: unknown };
   prefs?: Record<string, string>;
+}
+
+// Phase 0: chain archive
+export interface ArchiveSettings {
+  enabled: boolean;
+  extraSymbols: string[];
+  maxExpirations: number;
+}
+export interface ArchiveRunResult {
+  ok: boolean;
+  at?: string;
+  date?: string;
+  written?: Array<{ symbol: string; rows: number }>;
+  skipped?: string[];
+  errors?: Record<string, string>;
+  error?: string;
+}
+export interface ArchiveStatus {
+  settings: ArchiveSettings;
+  root: string;
+  watchlist: string[];
+  tradingDate: string;
+  missingToday: string[];
+  running: boolean;
+  last: ArchiveRunResult | null;
+  symbols: Record<string, { days: number; first: string | null; last: string | null; bytes: number }>;
 }
 
 function bridge(): Bridge | null {
@@ -253,6 +282,16 @@ export const api = {
   },
   icsBatch(body: { etf: string; constraints?: IcsConstraints; refresh?: boolean }): Promise<IcsResult> {
     return bridge()?.icsBatch?.(body) ?? post<IcsResult>("/screener/batch", body);
+  },
+  // Phase 0 chain archive
+  archiveStatus(): Promise<ArchiveStatus> {
+    return bridge()?.archiveStatus?.() ?? request("GET", "/archive/status");
+  },
+  archiveSnapshot(body: { force?: boolean; symbols?: string[] }): Promise<ArchiveRunResult> {
+    return bridge()?.archiveSnapshot?.(body) ?? post("/archive/snapshot", body);
+  },
+  archiveSettings(body: Partial<ArchiveSettings>): Promise<ArchiveSettings> {
+    return bridge()?.archiveSettings?.(body) ?? request("PUT", "/archive/settings", body);
   },
   marketPulse(watch: string[]): Promise<MarketPulse> {
     const joined = watch.join(",");
