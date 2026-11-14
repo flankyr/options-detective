@@ -20,8 +20,7 @@ const { DataError } = require("./dataLayer");
 const { curatedHoldingsFor } = require("./etfHoldings");
 const { BY_TICKER } = require("./etfUniverse");
 const { icsStore: defaultStore } = require("./icsStore");
-const { mathCommand } = require("./python");
-const { spawn } = require("child_process");
+const { runPython } = require("./pythonRun");
 
 const MAX_SYMBOLS = 40;      // safety cap per batch
 const PER_SYMBOL_TOP_N = 8;  // merged set stays 50-200+ without bloating
@@ -39,41 +38,9 @@ const BATCH_DEFAULTS = {
   maxExpirations: 3,   // fewer than single-symbol screens: speed over depth
 };
 
-function fetchHoldingsViaPython(ticker, { timeoutMs = FETCH_TIMEOUT_MS } = {}) {
-  return new Promise((resolve, reject) => {
-    const cmd = mathCommand("etf_holdings");
-    const proc = spawn(cmd.bin, cmd.args, { cwd: cmd.cwd, windowsHide: true });
-    let stdout = "";
-    let stderr = "";
-    const timer = setTimeout(() => {
-      proc.kill();
-      reject(new Error(`holdings fetch timed out after ${timeoutMs}ms`));
-    }, timeoutMs);
-    proc.stdout.on("data", (c) => { stdout += c; });
-    proc.stderr.on("data", (c) => { stderr += c; });
-    proc.on("error", (err) => {
-      clearTimeout(timer);
-      reject(new Error(`failed to start holdings fetcher: ${err.message}`));
-    });
-    proc.on("close", (code) => {
-      clearTimeout(timer);
-      if (code !== 0) {
-        reject(new Error(`holdings fetcher exited ${code}: ${stderr.slice(0, 300)}`));
-        return;
-      }
-      let parsed;
-      try {
-        parsed = JSON.parse(stdout);
-      } catch {
-        reject(new Error(`holdings fetcher returned invalid JSON: ${stdout.slice(0, 200)}`));
-        return;
-      }
-      if (!parsed.ok) reject(new Error(parsed.error));
-      else resolve(parsed.result[String(ticker).toUpperCase()]);
-    });
-    proc.stdin.write(JSON.stringify({ tickers: [ticker] }));
-    proc.stdin.end();
-  });
+async function fetchHoldingsViaPython(ticker, { timeoutMs = FETCH_TIMEOUT_MS } = {}) {
+  const result = await runPython("etf_holdings", { tickers: [ticker] }, { timeoutMs });
+  return result[String(ticker).toUpperCase()];
 }
 
 // run tasks over items with a fixed-size worker pool; order preserved

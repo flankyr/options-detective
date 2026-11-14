@@ -4,6 +4,7 @@ import { friendlyError } from "../../lib/friendlyError";
 import { useStore } from "../../store";
 import Button from "../ui/Button";
 import { FormInput } from "../ui/Input";
+import { ProvidersSection } from "./SettingsProvidersSection";
 
 // Phase 0 (roadmap v2): the chain archive. One parquet snapshot per symbol per
 // trading day, taken after the 16:00 ET close. This is the raw material for
@@ -70,6 +71,7 @@ export function DataTab() {
 
   return (
     <div className="animate-card-enter" data-testid="data-settings">
+      <ProvidersSection />
       <div className="mb-3 rounded-md bg-dark-700/50 p-4">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div>

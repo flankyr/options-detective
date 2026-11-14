@@ -56,6 +56,9 @@ type Bridge = {
   archiveStatus?: () => Promise<ArchiveStatus>;
   archiveSnapshot?: (body: { force?: boolean; symbols?: string[] }) => Promise<ArchiveRunResult>;
   archiveSettings?: (body: Partial<ArchiveSettings>) => Promise<ArchiveSettings>;
+  dataProviders?: () => Promise<DataProvidersStatus>;
+  dataProvidersUpdate?: (body: DataProvidersPatch) => Promise<DataProvidersStatus>;
+  dataRatesRefresh?: () => Promise<RatesInfo>;
 };
 
 // v1.5.0: process() now also returns assignment events + holdings snapshot
@@ -112,6 +115,39 @@ export interface ArchiveStatus {
   running: boolean;
   last: ArchiveRunResult | null;
   symbols: Record<string, { days: number; first: string | null; last: string | null; bytes: number }>;
+}
+
+// Phase 1: data platform
+export interface ProviderCapabilities {
+  live: boolean;
+  historical: boolean;
+  delayed_minutes: number;
+  has_greeks: boolean;
+  has_open_interest: boolean;
+  has_volume: boolean;
+  history_depth_days: number;
+  license_note: string;
+}
+export interface RatesInfo {
+  source: string | null;
+  date: string | null;
+  fetchedOn: string | null;
+  lastError: string | null;
+  points: number;
+}
+export interface DataProvidersStatus {
+  root: string;
+  liveOrder: string[];
+  historicalOrder: string[];
+  providers: Array<{ name: string; configured: boolean; capabilities: ProviderCapabilities }>;
+  rates: RatesInfo;
+  config: Record<string, unknown>;
+  archiveSymbols: Record<string, { days: number; first: string | null; last: string | null; bytes: number }>;
+}
+export interface DataProvidersPatch {
+  massiveApiKey?: string;
+  liveOrder?: string[];
+  historicalOrder?: string[];
 }
 
 function bridge(): Bridge | null {
@@ -292,6 +328,15 @@ export const api = {
   },
   archiveSettings(body: Partial<ArchiveSettings>): Promise<ArchiveSettings> {
     return bridge()?.archiveSettings?.(body) ?? request("PUT", "/archive/settings", body);
+  },
+  dataProviders(): Promise<DataProvidersStatus> {
+    return bridge()?.dataProviders?.() ?? request("GET", "/data/providers");
+  },
+  dataProvidersUpdate(body: DataProvidersPatch): Promise<DataProvidersStatus> {
+    return bridge()?.dataProvidersUpdate?.(body) ?? request("PUT", "/data/providers", body);
+  },
+  dataRatesRefresh(): Promise<RatesInfo> {
+    return bridge()?.dataRatesRefresh?.() ?? post("/data/rates/refresh", {});
   },
   marketPulse(watch: string[]): Promise<MarketPulse> {
     const joined = watch.join(",");

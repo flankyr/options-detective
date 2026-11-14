@@ -6,9 +6,7 @@
 // - contracts failing volume/OI gates are REMOVED before anyone screens them;
 //   contracts with a wide (or unknowable) spread are kept but flagged
 //   `illiquid: true` and must never end up in a recommendation
-const { spawn } = require("child_process");
-
-const { mathCommand } = require("./python");
+const { runPython, PythonDomainError } = require("./pythonRun");
 
 // Upstream/domain problem (unknown symbol, no options listed) — maps to 404.
 class DataError extends Error {}
@@ -28,54 +26,20 @@ const STALE_AFTER_S = 15 * 60; // quotes older than this are flagged stale
 
 const SYMBOL_RE = /^[A-Za-z][A-Za-z0-9.^-]{0,9}$/;
 
+// Phase 1: every chain comes through the Python DataService (math/data/),
+// which picks the provider (Massive, yfinance live; archive, DoltHub for a
+// past `asof`) and stamps provider, asof, rates and dividendYield on the
+// payload. Schema: docs/api-schema.md (v2).
 function fetchViaPython(symbol, { maxExpirations = 6, minDte = 1, maxDte = 120,
-                                  timeoutMs = 120_000 } = {}) {
-  return new Promise((resolve, reject) => {
-    const cmd = mathCommand("market_data");
-    const proc = spawn(cmd.bin, cmd.args, {
-      cwd: cmd.cwd,
-      windowsHide: true,
-    });
-    let stdout = "";
-    let stderr = "";
-    const timer = setTimeout(() => {
-      proc.kill();
-      reject(new Error(`market data fetch timed out after ${timeoutMs}ms (${symbol})`));
-    }, timeoutMs);
-
-    proc.stdout.on("data", (chunk) => { stdout += chunk; });
-    proc.stderr.on("data", (chunk) => { stderr += chunk; });
-    proc.on("error", (err) => {
-      clearTimeout(timer);
-      reject(new Error(`failed to start market data adapter: ${err.message}`));
-    });
-    proc.on("close", (code) => {
-      clearTimeout(timer);
-      if (code !== 0) {
-        reject(new Error(`market data adapter exited with code ${code}: ${stderr.slice(0, 500)}`));
-        return;
-      }
-      let parsed;
-      try {
-        parsed = JSON.parse(stdout);
-      } catch {
-        reject(new Error(`market data adapter returned invalid JSON: ${stdout.slice(0, 200)}`));
-        return;
-      }
-      if (!parsed.ok) {
-        reject(new DataError(parsed.error));
-        return;
-      }
-      resolve(parsed.result);
-    });
-
-    proc.stdin.write(JSON.stringify({
-      symbol,
-      max_expirations: maxExpirations,
-      min_dte: minDte,
-      max_dte: maxDte,
-    }));
-    proc.stdin.end();
+                                  asof = null, provider = null, timeoutMs = 120_000 } = {}) {
+  const req = {
+    cmd: "chain", symbol, max_expirations: maxExpirations, min_dte: minDte, max_dte: maxDte,
+  };
+  if (asof) req.asof = asof;
+  if (provider) req.provider = provider;
+  if (process.env.OD_DATA_DIR) req.root = process.env.OD_DATA_DIR;
+  return runPython("datasvc", req, { timeoutMs }).catch((err) => {
+    throw err instanceof PythonDomainError ? new DataError(err.message) : err;
   });
 }
 
@@ -93,11 +57,17 @@ function applyLiquidityGates(chains, gates = LIQUIDITY_GATES) {
           dropped.noPrice += 1;
           continue;
         }
-        if (contract.volume < gates.minVolume) {
+        // Phase 1: a source without volume/OI (DoltHub history) reports null.
+        // Null is "unknown", not zero: keep the contract, flag it, and let the
+        // caller decide (the backtester treats unknown as fine for marks, the
+        // live screener never recommends it).
+        const liquidityUnknown = contract.volume === null || contract.volume === undefined
+          || contract.openInterest === null || contract.openInterest === undefined;
+        if (!liquidityUnknown && contract.volume < gates.minVolume) {
           dropped.volume += 1;
           continue;
         }
-        if (contract.openInterest < gates.minOpenInterest) {
+        if (!liquidityUnknown && contract.openInterest < gates.minOpenInterest) {
           dropped.openInterest += 1;
           continue;
         }
@@ -113,6 +83,7 @@ function applyLiquidityGates(chains, gates = LIQUIDITY_GATES) {
           illiquid: absSpread !== null
             && absSpread > Math.max(gates.maxSpreadPct * contract.mid, gates.spreadFloorDollars),
           indicativeOnly: !hasBook,
+          liquidityUnknown,
         });
       }
     }
@@ -131,26 +102,34 @@ function createDataLayer({ fetcher = fetchViaPython, now = Date.now, ttlMs = CAC
     const quoteAge = Number.isFinite(lastTradeMs)
       ? Math.max(0, Math.round((now() - lastTradeMs) / 1000))
       : null;
+    const pointInTime = Boolean(data.asof) && !data.capabilities?.live;
     return {
       ...data,
       dataAgeSeconds: fetchAge,
       quoteAgeSeconds: quoteAge,
-      stale: (quoteAge ?? fetchAge) > STALE_AFTER_S,
+      pointInTime,
+      // a historical chain is old on purpose; "stale" means live data went quiet
+      stale: pointInTime ? false : (quoteAge ?? fetchAge) > STALE_AFTER_S,
     };
   }
 
   async function getMarketData(symbol, { refresh = false, maxExpirations = 6,
-                                          minDte = 1, maxDte = 120 } = {}) {
+                                          minDte = 1, maxDte = 120, asof = null,
+                                          provider = null } = {}) {
     if (typeof symbol !== "string" || !SYMBOL_RE.test(symbol.trim())) {
       throw new DataError(`invalid symbol: ${JSON.stringify(symbol)}`);
     }
     const sym = symbol.trim().toUpperCase();
-    const key = `${sym}:${maxExpirations}:${minDte}:${maxDte}`;
+    if (asof !== null && !/^\d{4}-\d{2}-\d{2}$/.test(String(asof))) {
+      throw new DataError(`invalid asof date: ${JSON.stringify(asof)} (expected YYYY-MM-DD)`);
+    }
+    const key = `${sym}:${maxExpirations}:${minDte}:${maxDte}:${asof ?? "live"}:${provider ?? ""}`;
     const hit = cache.get(key);
-    if (hit && !refresh && now() - hit.at < ttlMs) {
+    // point-in-time chains never change: cache them for the process lifetime
+    if (hit && !refresh && (asof !== null || now() - hit.at < ttlMs)) {
       return decorate(hit.data);
     }
-    const raw = await fetcher(sym, { maxExpirations, minDte, maxDte });
+    const raw = await fetcher(sym, { maxExpirations, minDte, maxDte, asof, provider });
     const gated = applyLiquidityGates(raw.chains);
     const data = {
       ...raw,

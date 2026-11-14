@@ -53,4 +53,7 @@ contextBridge.exposeInMainWorld("optionObelisk", {
   archiveStatus: () => ipcRenderer.invoke("api:archive:status"),
   archiveSnapshot: (body) => ipcRenderer.invoke("api:archive:snapshot", body),
   archiveSettings: (body) => ipcRenderer.invoke("api:archive:settings", body),
+  dataProviders: () => ipcRenderer.invoke("api:data:providers"),
+  dataProvidersUpdate: (body) => ipcRenderer.invoke("api:data:providers:update", body),
+  dataRatesRefresh: () => ipcRenderer.invoke("api:data:rates:refresh"),
 });
