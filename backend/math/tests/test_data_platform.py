@@ -287,3 +287,34 @@ def test_datasvc_handle_envelopes(tmp_path):
     assert datasvc.handle({"cmd": "status"}, svc)["result"]["liveOrder"] == ["yfinance"]
     assert datasvc.handle({"cmd": "rates"}, svc)["result"]["source"] == "treasury.gov"
     assert datasvc.handle({}, svc)["ok"] is False
+
+
+# ---- Phase 3: history + forecast through the service -------------------------------
+
+class HistFake(Fake):
+    def __init__(self, name, closes, dates):
+        super().__init__(name, True, False, result=fake_live_payload())
+        self._rows = list(zip(dates, closes))
+
+    def underlying_history(self, symbol, start, end):
+        return [(d, c) for d, c in self._rows if start.isoformat() <= d <= end.isoformat()]
+
+
+def test_service_history_and_forecast(tmp_path):
+    import numpy as np
+    from datetime import timedelta
+    rng = np.random.default_rng(3)
+    n = 500
+    end = date(2026, 11, 13)
+    dates = [(end - timedelta(days=n - 1 - i)).isoformat() for i in range(n)]
+    closes = list(100 * np.exp(np.cumsum(rng.normal(0, 0.012, n))))
+    svc = make_service(tmp_path, [HistFake("yfinance", closes, dates), Fake("archive", False, True, error=Unsupported("x"))])
+    h = svc.underlying_history("spy", days=100)
+    assert h["provider"] == "yfinance" and 90 <= len(h["rows"]) <= 170
+    fc = svc.forecast("SPY", 21, "ewma", iv_atm=0.25)
+    assert fc["method"] == "ewma" and fc["symbol"] == "SPY" and fc["asOf"] == dates[-1]
+    assert 0.1 < fc["sigma"] < 0.4
+    assert fc["vrp"]["vrp"] == pytest.approx(0.25 - fc["sigma"], abs=1e-6) and fc["vrp"]["z"] is None
+    assert datasvc.handle({"cmd": "forecast", "symbol": "SPY", "horizon": 21, "method": "ewma"}, svc)["ok"]
+    with pytest.raises(Unsupported):
+        make_service(tmp_path, [Fake("yfinance", True, False, result=fake_live_payload())]).underlying_history("SPY")

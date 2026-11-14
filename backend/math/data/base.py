@@ -27,6 +27,10 @@ class Provider:
         """[(ISO date, close), ...] ascending, or Unsupported."""
         raise Unsupported(f"{self.name} has no underlying history")
 
+    def atm_iv_history(self, symbol: str) -> list:
+        """[(ISO date, atm iv), ...] ascending, or [] when the source keeps none."""
+        return []
+
     def dividend_yield(self, symbol: str, price: float):
         """Trailing-12m cash dividends / price, or None."""
         return None

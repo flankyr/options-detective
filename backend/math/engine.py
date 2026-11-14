@@ -37,10 +37,12 @@ import numpy as np
 import american
 import black_scholes
 import bsm
+import distribution
 import iv_solver
 import payoff
 import probability
 import sizing
+import volforecast
 import volmodel
 
 DISPATCH = {
@@ -66,6 +68,11 @@ DISPATCH = {
     "exercise_style": american.exercise_style,
     "smile_fit": volmodel.smile_fit,
     "smile_iv": volmodel.smile_iv,
+    # Phase 3: distributions, EV/CVaR metrics, realized-vol forecasts
+    "implied_density": distribution.implied_density_json,
+    "evaluate_position": distribution.evaluate_position,
+    "vol_forecast": volforecast.forecast,
+    "vrp": volforecast.vrp,
 }
 
 

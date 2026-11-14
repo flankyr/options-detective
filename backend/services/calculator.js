@@ -18,6 +18,15 @@ const LEG_TYPES = new Set([
 const DEFAULTS = {
   riskFreeRate: Number(process.env.RISK_FREE_RATE ?? 0.04),
   dividendYield: 0, // Phase 2: continuous yield q for BSM pricing/greeks
+  // Phase 3: distribution-based evaluation. `smile` (a serialized smile from
+  // the chain payload) gives the market-implied density; without it the
+  // lognormal at `sigma` is used. mode: market | vrp | directional | both.
+  smile: null,
+  mode: "market",
+  sigmaForecast: null,
+  view: "neutral",
+  conviction: 0,
+  costs: 0,
   capital: 25_000,
   riskTolerancePct: 2,
   maxLossDollars: null,
@@ -110,6 +119,13 @@ function createCalculator({ engineBatch = callEngineBatch } = {}) {
       legs: eLegs, current_price: opts.spot, T, sigma, r: opts.riskFreeRate,
     };
 
+    const evalArgs = {
+      legs: eLegs, S: opts.spot, T, r: opts.riskFreeRate, q,
+      smile: opts.smile ?? null, sigma, mode: opts.mode ?? "market",
+      sigma_forecast: Number.isFinite(opts.sigmaForecast) && opts.sigmaForecast > 0 ? opts.sigmaForecast : null,
+      view: opts.view ?? "neutral", conviction: Number.isFinite(opts.conviction) ? opts.conviction : 0,
+      costs: Number.isFinite(opts.costs) ? opts.costs : 0,
+    };
     const requests = [
       { fn: "payoff_summary", args: { legs: eLegs } },
       { fn: "payoff_curve", args: { legs: eLegs, current_price: opts.spot, num_points: opts.curvePoints } },
@@ -125,6 +141,7 @@ function createCalculator({ engineBatch = callEngineBatch } = {}) {
             option_type: leg.type.endsWith("call") ? "call" : "put",
           },
         })).filter(Boolean),
+      { fn: "evaluate_position", args: evalArgs },
     ];
     const results = await engineBatch(requests);
 
@@ -132,7 +149,8 @@ function createCalculator({ engineBatch = callEngineBatch } = {}) {
     for (const item of [summary, curve, pop, pmp]) {
       if (!item.ok) throw new CalcInputError(item.error);
     }
-    const greekResults = results.slice(4);
+    const evaluation = results[results.length - 1];
+    const greekResults = results.slice(4, results.length - 1);
     let gi = 0;
     const legGreeks = opts.legs.map((leg) => {
       if (leg.type.endsWith("stock")) return null;
@@ -156,6 +174,10 @@ function createCalculator({ engineBatch = callEngineBatch } = {}) {
 
     return {
       legs: opts.legs.map((leg, i) => ({ ...leg, greeks: legGreeks[i] ?? undefined })),
+      // Phase 3: EV / POP / CVaR under the market-implied (or lognormal) density
+      // and, when a mode is set, under the scenario density. Absent only if the
+      // engine rejected the inputs; the reason travels with it.
+      evaluation: evaluation.ok ? evaluation.result : { error: evaluation.error },
       netGreeks,
       payoff: {
         maxProfit,

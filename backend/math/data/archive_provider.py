@@ -24,6 +24,31 @@ class ArchiveProvider(Provider):
     def available_dates(self, symbol):
         return archive.list_dates(self.root, symbol)
 
+    def _first_rows(self, symbol):
+        """(date, underlyingClose, atmIv) per archived day, cheap: one row per file."""
+        import pandas as pd
+        out = []
+        for d in self.available_dates(symbol):
+            try:
+                df = pd.read_parquet(archive.snapshot_path(self.root, symbol, date.fromisoformat(d)),
+                                     columns=["underlyingClose", "atmIv"])
+            except Exception:
+                continue
+            if len(df):
+                out.append((d, float(df.iloc[0]["underlyingClose"]),
+                            None if pd.isna(df.iloc[0]["atmIv"]) else float(df.iloc[0]["atmIv"])))
+        return out
+
+    def underlying_history(self, symbol, start, end):
+        rows = [(d, c) for d, c, _ in self._first_rows(symbol)
+                if start.isoformat() <= d <= end.isoformat()]
+        if not rows:
+            raise Unsupported("archive has no closes for that range")
+        return rows
+
+    def atm_iv_history(self, symbol):
+        return [(d, iv) for d, _, iv in self._first_rows(symbol) if iv is not None]
+
     def chain(self, symbol, asof=None, *, max_expirations=6, min_dte=1, max_dte=120):
         if asof is None:
             raise Unsupported("archive serves past dates only")

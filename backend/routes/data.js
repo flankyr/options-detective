@@ -2,6 +2,7 @@
 //   GET  /data/providers                 -> provider order, capabilities, rates source, archive coverage
 //   PUT  /data/providers                 -> { massiveApiKey?, liveOrder?, historicalOrder? }
 //   POST /data/rates/refresh             -> re-fetch the Treasury curve
+//   GET  /data/:symbol/forecast[?horizon=21&method=har&iv=0.18]  (Phase 3)
 //   GET  /data/:symbol[?refresh=1&expirations=6&asof=YYYY-MM-DD&provider=name]
 //        -> normalized chain after liquidity gates; `asof` = point-in-time read
 const { Router } = require("express");
@@ -49,6 +50,22 @@ router.put("/providers", async (req, res) => {
 router.post("/rates/refresh", async (_req, res) => {
   try {
     res.json(await runPython("datasvc", { cmd: "rates", force: true, ...root() }, { timeoutMs: 60_000 }));
+  } catch (err) {
+    fail(res, err);
+  }
+});
+
+// Phase 3: realized-vol forecast + VRP for one symbol.
+//   GET /data/:symbol/forecast?horizon=21&method=har|ewma|garch&iv=0.18
+router.get("/:symbol/forecast", async (req, res) => {
+  try {
+    const horizon = Math.min(Math.max(Number.parseInt(req.query.horizon, 10) || 21, 1), 252);
+    const method = ["har", "ewma", "garch"].includes(req.query.method) ? req.query.method : "har";
+    const iv = Number.parseFloat(req.query.iv);
+    res.json(await runPython("datasvc", {
+      cmd: "forecast", symbol: req.params.symbol, horizon, method,
+      iv_atm: Number.isFinite(iv) && iv > 0 ? iv : null, ...root(),
+    }, { timeoutMs: 120_000 }));
   } catch (err) {
     fail(res, err);
   }

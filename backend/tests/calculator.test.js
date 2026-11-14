@@ -126,3 +126,26 @@ test("adjustment flow: widening the spread raises max profit and max loss", engi
   assert.ok(wide.payoff.maxProfit > narrow.payoff.maxProfit);
   assert.ok(wide.payoff.maxLoss > narrow.payoff.maxLoss);
 });
+
+// ---- Phase 3: distribution evaluation rides along with every analysis ---------
+test("Phase 3: analyze() returns market EV ~0 for fairly priced legs and a scenario block when asked", engineTest, async () => {
+  const calc = createCalculator();
+  const spot = 100, dte = 45, T = dte / 365, sigma = 0.25;
+  const { callEngine } = require("../services/mathEngine");
+  const p480 = await callEngine("bsm_price", { S: spot, K: 95, T, r: 0, sigma, q: 0, option_type: "put" });
+  const p470 = await callEngine("bsm_price", { S: spot, K: 90, T, r: 0, sigma, q: 0, option_type: "put" });
+  const legs = [
+    { type: "short_put", strike: 95, price: p480, qty: 1, iv: sigma },
+    { type: "long_put", strike: 90, price: p470, qty: 1, iv: sigma },
+  ];
+  const base = await calc.analyze({ legs, spot, dte, sigma, riskFreeRate: 0 });
+  assert.ok(base.evaluation && base.evaluation.market);
+  assert.ok(Math.abs(base.evaluation.market.ev) < 1.0, `ev ${base.evaluation.market.ev}`);
+  assert.equal(base.evaluation.market.distribution, "lognormal");
+  assert.ok(Math.abs(base.evaluation.market.pop - base.probability.pop) < 0.01);
+  assert.equal(base.evaluation.scenario, undefined);
+  const vrp = await calc.analyze({ legs, spot, dte, sigma, riskFreeRate: 0, mode: "vrp", sigmaForecast: 0.18, costs: 4 });
+  assert.ok(vrp.evaluation.scenario.ev > vrp.evaluation.market.ev);
+  assert.equal(vrp.evaluation.scenarioParams.sigmaForecast, 0.18);
+  assert.equal(vrp.evaluation.market.costs, 4);
+});

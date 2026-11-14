@@ -8,6 +8,7 @@ from datetime import date
 
 import american
 import archive
+import volforecast
 import volmodel
 
 from .archive_provider import ArchiveProvider
@@ -139,6 +140,58 @@ class DataService:
         mode = "live" if asof is None else f"historical ({asof.isoformat()})"
         detail = "; ".join(f"{a['provider']}: {a['error']}" for a in attempts) or "no providers"
         raise Unsupported(f"no {mode} source could serve {symbol.upper()}: {detail}")
+
+    # ---- history + forecasts (Phase 3) -------------------------------------------
+    def underlying_history(self, symbol, days=400, end=None):
+        """Daily closes for the last `days`: live providers first (deep history),
+        the archive's own closes as the offline fallback."""
+        from datetime import timedelta
+        end = end or self.today()
+        start = end - timedelta(days=int(days * 1.6))  # calendar -> trading-day slack
+        attempts = []
+        order = [n for n in self.live_order()] + [n for n in self.hist_order() if n == "archive"]
+        for name in order:
+            p = self.providers.get(name)
+            if p is None or not p.configured():
+                continue
+            try:
+                rows = p.underlying_history(symbol, start, end)
+            except Unsupported as exc:
+                attempts.append({"provider": name, "error": str(exc)})
+                continue
+            except Exception as exc:
+                attempts.append({"provider": name, "error": f"{type(exc).__name__}: {exc}"})
+                continue
+            if rows:
+                return {"symbol": symbol.upper(), "provider": name, "rows": rows, "attempts": attempts}
+        raise Unsupported(f"no source has price history for {symbol.upper()}: "
+                          + "; ".join(f"{a['provider']}: {a['error']}" for a in attempts))
+
+    def forecast(self, symbol, horizon_days=21, method="har", iv_atm=None):
+        """Realized-vol forecast at `horizon_days` trading days + VRP against
+        `iv_atm` (pass the chain's ATM vol at the matching expiry)."""
+        hist = self.underlying_history(symbol)
+        closes = [c for _, c in hist["rows"]]
+        fc = volforecast.forecast(closes, int(horizon_days), method)
+        fc["symbol"] = symbol.upper()
+        fc["historyProvider"] = hist["provider"]
+        fc["asOf"] = hist["rows"][-1][0]
+        # VRP history: archived ATM IV minus the trailing 21d realized vol on that day
+        # (a proxy for IV - forecast; good enough to z-score once ~20 days exist)
+        arch = self.providers.get("archive")
+        history = []
+        if arch is not None:
+            closes_by_date = dict(hist["rows"])
+            dates = sorted(closes_by_date)
+            import numpy as np
+            for d, iv in arch.atm_iv_history(symbol):
+                idx = [i for i, dd in enumerate(dates) if dd <= d]
+                if len(idx) >= 22:
+                    window = np.array([closes_by_date[dates[i]] for i in idx[-22:]])
+                    rv = volforecast.realized_vol(np.diff(np.log(window)), 21)
+                    history.append(iv - rv)
+        fc["vrp"] = volforecast.vrp(iv_atm, fc["sigma"], history)
+        return fc
 
     def status(self):
         arch = self.providers.get("archive")
