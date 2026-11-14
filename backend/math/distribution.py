@@ -83,8 +83,9 @@ class Distribution:
         return m, s
 
     def to_dict(self, points=121):
-        """Downsampled for the UI: quantile-spaced x, pdf, cdf."""
-        idx = np.unique(np.linspace(0, len(self.x) - 1, points).astype(int))
+        """Downsampled for the UI: quantile-spaced x (dense where the mass is), pdf, cdf."""
+        qs = np.linspace(0.0005, 0.9995, points)
+        idx = np.unique(np.searchsorted(self._cdf, qs).clip(0, len(self.x) - 1))
         return {
             "kind": self.kind, "params": self.params,
             "x": [float(v) for v in self.x[idx]],
@@ -120,7 +121,7 @@ def implied_density(smile, S, T, r, q, n=GRID_POINTS):
     span = max(atm, 0.05) * math.sqrt(max(T, 1 / 365)) * GRID_SIGMAS
     for _ in range(6):
         wing = float(max(sm.iv(-span), sm.iv(span), atm))
-        new_span = min(wing * math.sqrt(max(T, 1 / 365)) * GRID_SIGMAS, 4.0)
+        new_span = min(wing * math.sqrt(max(T, 1 / 365)) * GRID_SIGMAS, 8.0)
         if new_span <= span * 1.02:
             break
         span = new_span
@@ -202,8 +203,15 @@ def payoff_grid(legs, x, multiplier=CONTRACT_MULTIPLIER):
             total += sign * qty * (x - price)
             continue
         K = float(leg["strike"])
-        intrinsic = np.maximum(x - K, 0.0) if t.endswith("call") else np.maximum(K - x, 0.0)
-        total += sign * qty * multiplier * (intrinsic - price)
+        trem = leg.get("Trem")
+        if trem and trem > 0:
+            # leg outlives the horizon (calendar/diagonal far leg): mark it at
+            # BSM value at the horizon, sticky-strike vol, instead of intrinsic
+            value = bsm.price(x, K, trem, float(leg.get("r", 0.0)), float(leg.get("q", 0.0)),
+                              float(leg.get("iv") or 0.2), t.endswith("call"))
+        else:
+            value = np.maximum(x - K, 0.0) if t.endswith("call") else np.maximum(K - x, 0.0)
+        total += sign * qty * multiplier * (value - price)
     return total
 
 
@@ -217,7 +225,7 @@ def entry_cost(legs, multiplier=CONTRACT_MULTIPLIER):
     return total
 
 
-def position_metrics(legs, dist: Distribution, *, r=0.0, T=0.0, costs=0.0,
+def position_metrics(legs, dist: Distribution, *, r=0.0, T=0.0, q=0.0, costs=0.0,
                      capital=None, multiplier=CONTRACT_MULTIPLIER):
     """All the numbers the optimizer ranks on, under one distribution.
 
@@ -230,7 +238,11 @@ def position_metrics(legs, dist: Distribution, *, r=0.0, T=0.0, costs=0.0,
     pnl_raw = payoff_grid(legs, dist.x, multiplier)   # payoff minus premium (undiscounted)
     cost0 = entry_cost(legs, multiplier)
     financing = cost0 * (math.exp(r * T) - 1.0)       # carry on the premium paid/received
-    pnl = pnl_raw - financing - costs
+    # dividends: a stock leg collects (pays) the yield over the horizon
+    dividends = sum((1.0 if l["type"].startswith("long") else -1.0) * float(l.get("qty", 1))
+                    * float(l.get("price", 0.0)) * (math.exp(q * T) - 1.0)
+                    for l in legs if l["type"].endswith("stock"))
+    pnl = pnl_raw - financing - costs + dividends
     ev = dist.expectation(pnl)
     pop = dist.expectation((pnl > 0).astype(float))
     max_pnl = float(pnl.max())
@@ -269,6 +281,7 @@ def position_metrics(legs, dist: Distribution, *, r=0.0, T=0.0, costs=0.0,
         "expectedMove": round(dist.std, 4),
         "entryCost": round(cost0, 2),
         "financing": round(financing, 4),
+        "dividends": round(dividends, 4),
         "costs": round(costs, 4),
         "distribution": dist.kind,
     }
@@ -292,7 +305,7 @@ def evaluate_position(legs, S, T, r, q=0.0, smile=None, sigma=None, *, mode="mar
         market = lognormal_density(S, T, sigma, drift=(r - q))
     else:
         raise ValueError("either smile or sigma is required")
-    out = {"market": position_metrics(legs, market, r=r, T=T, costs=costs, capital=capital)}
+    out = {"market": position_metrics(legs, market, r=r, T=T, q=q, costs=costs, capital=capital)}
     out["forward"] = F
     if mode != "market":
         _, s_impl = market.log_moments(F)
@@ -300,7 +313,7 @@ def evaluate_position(legs, S, T, r, q=0.0, smile=None, sigma=None, *, mode="mar
         sf = sigma_forecast if mode in ("vrp", "both") and sigma_forecast else None
         drift = view_drift(view, conviction, sf or s_impl_ann, T) if mode in ("directional", "both") else 0.0
         scen = scenario_density(market, F, T, sigma_forecast=sf, drift_shift=drift)
-        out["scenario"] = position_metrics(legs, scen, r=r, T=T, costs=costs, capital=capital)
+        out["scenario"] = position_metrics(legs, scen, r=r, T=T, q=q, costs=costs, capital=capital)
         out["scenarioParams"] = {"mode": mode, "sigmaImplied": s_impl_ann, "sigmaForecast": sf,
                                  "view": view, "conviction": conviction, "driftShift": drift}
         if include_distribution:

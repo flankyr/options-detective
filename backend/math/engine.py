@@ -39,6 +39,7 @@ import black_scholes
 import bsm
 import distribution
 import iv_solver
+import optimizer
 import payoff
 import probability
 import sizing
@@ -73,6 +74,8 @@ DISPATCH = {
     "evaluate_position": distribution.evaluate_position,
     "vol_forecast": volforecast.forecast,
     "vrp": volforecast.vrp,
+    # Phase 4: the whole screen in one call (payload = enriched chain)
+    "screen_v2": optimizer.screen,
 }
 
 

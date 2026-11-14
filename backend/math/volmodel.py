@@ -29,6 +29,7 @@ import bsm
 from smile import Smile, fit_smile, total_variance_interp
 
 VENDOR_TOL = 0.15
+MIN_FIT_MID = 0.05
 DEFAULT_R = 0.04
 
 
@@ -64,7 +65,9 @@ def enrich(payload: dict) -> dict:
         spread = np.array([c.get("spreadPct") if c.get("spreadPct") is not None else 0.2
                            for c, _ in contracts], dtype=float)
         weights = 1.0 / np.clip(spread, 0.005, 1.0)
-        usable = np.isfinite(iv) & otm
+        # penny options carry no vol information (a 1c book on a 5c option is a
+        # 20-vol-point error bar); keep them out of the fit, they still get ivSmile
+        usable = np.isfinite(iv) & otm & (mids >= MIN_FIT_MID)
         smile = None
         if np.any(usable):
             try:

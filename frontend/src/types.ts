@@ -2,6 +2,7 @@
 // responses; the backend is the source of truth for every numeric value —
 // the frontend never computes one, it only formats.
 
+// v1 seven plus the Phase 4 optimizer's structures (math/structures.py SPEC)
 export type StrategyType =
   | "covered_call"
   | "cash_secured_put"
@@ -9,7 +10,20 @@ export type StrategyType =
   | "put_vertical"
   | "iron_condor"
   | "long_straddle"
-  | "short_strangle";
+  | "short_strangle"
+  | "long_call"
+  | "long_put"
+  | "call_credit_spread"
+  | "put_credit_spread"
+  | "iron_butterfly"
+  | "short_straddle"
+  | "long_strangle"
+  | "calendar"
+  | "diagonal"
+  | "call_ratio_spread";
+
+// Phase 4: ranking distribution. market = Transparent Analyzer (no edge assumed).
+export type ScreenMode = "market" | "vrp" | "directional" | "both";
 
 export type DirectionalView = "bullish" | "bearish" | "neutral" | "income";
 
@@ -74,12 +88,17 @@ export interface Sizing {
 }
 
 export type ScoreComponentKey = "pop" | "ror" | "theta" | "capEff" | "liquidity";
+// Phase 4 score v2 components (optimizer.WEIGHTS). The UI re-weighting in
+// lib/scoring.ts still speaks v1 keys until Phase 6; a v2 breakdown carries
+// `version: 2` and these keys instead.
+export type ScoreComponentKeyV2 = "evCvar" | "pop" | "theta" | "liquidity" | "confidence";
 
 // Normalized (0-1) scoring components from the backend, plus the default
 // weights it used. theta is normalized relative to the screened set.
 export interface ScoreBreakdown {
-  components: Record<ScoreComponentKey, number>;
-  weights: Record<ScoreComponentKey, number>;
+  components: Record<ScoreComponentKey, number> | Record<ScoreComponentKeyV2, number>;
+  weights: Record<ScoreComponentKey, number> | Record<ScoreComponentKeyV2, number>;
+  version?: 1 | 2;
 }
 
 export interface Candidate {
@@ -121,6 +140,11 @@ export interface ScreenParams {
   definedRiskOnly: boolean;
   refresh?: boolean;
   topN?: number;
+  // Phase 4 (all optional; backend defaults apply)
+  mode?: ScreenMode;
+  conviction?: number;
+  allowedStrategies?: StrategyType[];
+  asof?: string | null;
 }
 
 export interface ScreenResult {

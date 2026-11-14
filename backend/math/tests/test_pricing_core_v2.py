@@ -164,8 +164,10 @@ def test_smile_falls_back_to_spline_with_few_points_and_flat_wings():
     iv = np.array([0.3, 0.25, 0.24])
     sm = smile.fit_smile(k, iv, T)
     assert sm.method == "spline" and sm.n_used == 3
-    assert sm.iv(-0.1) == pytest.approx(0.3) and sm.iv(-0.8) == pytest.approx(0.3)  # flat beyond range
-    assert sm.iv(0.5) == pytest.approx(0.24)
+    assert sm.iv(-0.1) == pytest.approx(0.3)
+    # beyond the observed range the edge slope is damped and the wing flattens
+    assert 0.3 <= float(sm.iv(-0.8)) <= 0.45 and float(sm.iv(-5)) == pytest.approx(float(sm.iv(-3)), abs=1e-6)
+    assert 0.2 <= float(sm.iv(0.5)) <= 0.24
     one = smile.fit_smile([0.0], [0.2], T)
     assert one.method == "flat" and one.iv(0.7) == pytest.approx(0.2)
     with pytest.raises(ValueError):

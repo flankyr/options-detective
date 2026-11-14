@@ -60,8 +60,10 @@ def fit_svi(k, iv, T, weights=None):
     atm = float(np.interp(0.0, k, w_obs)) if k.min() <= 0 <= k.max() else float(np.median(w_obs))
     span = max(k.max() - k.min(), 0.2)
     x0 = np.array([0.5 * atm, max(0.1 * atm / span, 1e-4), -0.3, 0.0, 0.1 * span])
-    lo = np.array([-1.0, 0.0, -0.999, -2.0, 1e-4])
-    hi = np.array([5.0, 10.0, 0.999, 2.0, 5.0])
+    # keep the minimum inside the observed range and the slopes sane: Lee's
+    # moment bound caps the total-variance wing slope b(1 +/- rho) at 2
+    lo = np.array([0.0, 0.0, -0.999, float(k.min()), 1e-4])
+    hi = np.array([5.0, 2.0, 0.999, float(k.max()), 2.0 * span])
 
     def resid(p):
         a, b, rho, m, s = p
@@ -91,13 +93,36 @@ class Smile:
         self.arbitrage_free = arbitrage_free
         self.min_g = min_g
 
-    def iv(self, k):
-        k = np.asarray(k, dtype=float)
+    def _inside(self, k):
         if self.method == "svi":
             return svi_iv(k, self.params, self.T)
+        return np.maximum(self._spline(k), 1e-4)
+
+    def iv(self, k):
+        """Vol at log-forward-moneyness k.
+
+        Inside the observed strike range: the fitted curve. Beyond it: the
+        edge value plus the edge slope damped by tanh, so the wing continues
+        smoothly (C1, no point mass in the Breeden-Litzenberger density) and
+        then flattens. An SVI fitted to 20 strikes says nothing reliable about
+        k = -1; a flat-ish wing is the conservative reading of no information.
+        """
+        k = np.asarray(k, dtype=float)
         lo, hi = self.k_range
-        kc = np.clip(k, lo, hi)  # flat wings beyond the observed strikes
-        return np.maximum(self._spline(kc), 1e-4)
+        if hi <= lo:
+            return self._inside(np.full_like(k, lo))
+        L = max(0.5 * (hi - lo), 0.05)
+        h = 1e-4
+        out = self._inside(np.clip(k, lo, hi))
+        right = k > hi
+        if np.any(right):
+            slope = float((self._inside(np.array([hi])) - self._inside(np.array([hi - h])))[0] / h)
+            out = np.where(right, self._inside(np.array([hi]))[0] + slope * L * np.tanh((k - hi) / L), out)
+        left = k < lo
+        if np.any(left):
+            slope = float((self._inside(np.array([lo + h])) - self._inside(np.array([lo])))[0] / h)
+            out = np.where(left, self._inside(np.array([lo]))[0] - slope * L * np.tanh((lo - k) / L), out)
+        return np.maximum(out, 1e-4)
 
     def iv_strike(self, K, F):
         return self.iv(np.log(np.asarray(K, dtype=float) / F))

@@ -140,11 +140,13 @@ def test_evaluate_position_envelope_and_json():
     assert set(out) >= {"market", "scenario", "scenarioParams", "forward", "marketDistribution", "scenarioDistribution"}
     assert out["scenario"]["ev"] > out["market"]["ev"]  # lower vol + bullish tilt both help a put spread
     assert out["scenarioParams"]["sigmaForecast"] == 0.15 and out["scenarioParams"]["driftShift"] > 0
-    assert 100 <= len(out["marketDistribution"]["x"]) <= 121
+    assert 60 <= len(out["marketDistribution"]["x"]) <= 121
     json.dumps(out)
     only_market = D.evaluate_position(legs, S, T, R, Q, sigma=0.25, mode="market")
     assert "scenario" not in only_market and only_market["market"]["distribution"] == "lognormal"
     with pytest.raises(ValueError):
         D.evaluate_position(legs, S, T, R, Q)
     rt = D.Distribution.from_dict(out["marketDistribution"])
-    assert rt.cdf(500) == pytest.approx(0.5, abs=0.1)
+    full = D.implied_density(sm, S, T, R, Q)
+    assert rt.cdf(500) == pytest.approx(full.cdf(500), abs=0.03)
+    assert rt.cdf(450) == pytest.approx(full.cdf(450), abs=0.03)

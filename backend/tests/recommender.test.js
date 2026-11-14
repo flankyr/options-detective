@@ -74,7 +74,7 @@ test("rank sorts by composite score and annotates export text", () => {
   assert.deepEqual(out.ranked.map((c) => c.id), ["b", "c", "a"]);
   assert.deepEqual(out.ranked.map((c) => c.rank), [1, 2, 3]);
   assert.ok(out.ranked.every((c) => typeof c.exportText === "string"));
-  assert.ok(out.weights.pop === 0.30);
+  assert.deepEqual(Object.keys(out.weights).sort(), ["confidence", "evCvar", "liquidity", "pop", "theta"]);
 });
 
 test("trade-off facts surface POP, capital, defined risk and simplicity", () => {
@@ -101,12 +101,14 @@ test("trade-off facts surface POP, capital, defined risk and simplicity", () => 
 });
 
 test("recommend() screens when given a symbol, ranks when given candidates", engineTest, async () => {
+  const { realisticMarketData } = require("./fixtures");
   const recommender = createRecommender({
     detector: createDetector({
-      dataLayer: fakeDataLayer(syntheticMarketData({ ivRank: 80 })),
+      dataLayer: fakeDataLayer(await realisticMarketData()),
+      forecaster: async () => null,
     }),
   });
-  const screened = await recommender.recommend({ symbol: "TEST", directionalView: "neutral" });
+  const screened = await recommender.recommend({ symbol: "TEST", directionalView: "neutral", mode: "market", minDTE: 1, maxDTE: 400 });
   assert.equal(screened.source, "screened");
   assert.ok(screened.ranked.length >= 3);
   assert.ok(screened.ranked[0].compositeScore >= screened.ranked.at(-1).compositeScore);

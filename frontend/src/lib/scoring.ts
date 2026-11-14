@@ -97,12 +97,22 @@ export function normalizeWeights(w: ScoreWeights): ScoreWeights {
 
 // Weights are normalized by their sum here so the 0-10 scale stays
 // meaningful mid-edit; ordering is unaffected by that scaling.
-export function effectiveScore(c: Candidate, weights: ScoreWeights): number {
+// Phase 4 interim: a v2 breakdown (optimizer score, keys evCvar/pop/theta/
+// liquidity/confidence) is not re-weightable with the v1 sliders. Until the
+// Phase 6 UI speaks v2, v2 candidates keep the backend's composite score and
+// show no per-component bars.
+function v1Components(c: Candidate): Record<ScoreComponentKey, number> | null {
   const b = c.scoreBreakdown;
-  if (!b) return c.compositeScore; // pre-v1.1 snapshots
+  if (!b || b.version === 2 || !("ror" in b.components)) return null;
+  return b.components as Record<ScoreComponentKey, number>;
+}
+
+export function effectiveScore(c: Candidate, weights: ScoreWeights): number {
+  const comps = v1Components(c);
+  if (!comps) return c.compositeScore; // pre-v1.1 snapshots or v2 breakdown
   const sum = weightsSum(weights) || 1;
   const raw = COMPONENT_KEYS.reduce(
-    (s, k) => s + (weights[k] / sum) * (b.components[k] ?? 0), 0);
+    (s, k) => s + (weights[k] / sum) * (comps[k] ?? 0), 0);
   return Math.round(raw * 1000) / 100;
 }
 
@@ -114,14 +124,14 @@ export interface Contribution {
 }
 
 export function contributions(c: Candidate, weights: ScoreWeights): Contribution[] {
-  const b = c.scoreBreakdown;
-  if (!b) return [];
+  const comps = v1Components(c);
+  if (!comps) return [];
   const sum = weightsSum(weights) || 1;
   return COMPONENT_KEYS.map((k) => ({
     key: k,
     label: COMPONENT_META[k].label,
-    component: b.components[k] ?? 0,
-    points: Math.round((weights[k] / sum) * (b.components[k] ?? 0) * 1000) / 100,
+    component: comps[k] ?? 0,
+    points: Math.round((weights[k] / sum) * (comps[k] ?? 0) * 1000) / 100,
   }));
 }
 
