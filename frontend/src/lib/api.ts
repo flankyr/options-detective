@@ -115,7 +115,7 @@ export interface ArchiveStatus {
 }
 
 function bridge(): Bridge | null {
-  return (window as { optionsDetective?: Bridge }).optionsDetective ?? null;
+  return (window as { optionObelisk?: Bridge }).optionObelisk ?? null;
 }
 
 async function request<T>(method: string, path: string, body?: unknown): Promise<T> {

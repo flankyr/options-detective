@@ -4,6 +4,7 @@ const assert = require("node:assert/strict");
 
 const { createCalculator, CalcInputError } = require("../services/calculator");
 const { engineClient } = require("../services/mathEngine");
+const { engineTest } = require("./engineAvailable");
 
 test.after(() => engineClient.shutdown());
 
@@ -20,7 +21,7 @@ const BULL_CALL = {
   riskTolerancePct: 2,
 };
 
-test("bull call spread: exact payoff, probabilities, sizing", async () => {
+test("bull call spread: exact payoff, probabilities, sizing", engineTest, async () => {
   const out = await calc.analyze(BULL_CALL);
 
   // exact payoff math (width 5, debit 2)
@@ -43,12 +44,12 @@ test("bull call spread: exact payoff, probabilities, sizing", async () => {
   assert.equal(out.sizing.capitalRequired, 200);
 });
 
-test("sigma falls back to average leg IV and is echoed in inputs", async () => {
+test("sigma falls back to average leg IV and is echoed in inputs", engineTest, async () => {
   const out = await calc.analyze(BULL_CALL);
   assert.ok(Math.abs(out.inputs.sigma - 0.245) < 1e-9);
 });
 
-test("covered call uses buy-write capital when strategyType is passed", async () => {
+test("covered call uses buy-write capital when strategyType is passed", engineTest, async () => {
   const out = await calc.analyze({
     legs: [
       { type: "long_stock", price: 100, qty: 100 },
@@ -64,7 +65,7 @@ test("covered call uses buy-write capital when strategyType is passed", async ()
   assert.deepEqual(out.payoff.breakevens, [98]);
 });
 
-test("undefined-risk position gets a flagged margin proxy", async () => {
+test("undefined-risk position gets a flagged margin proxy", engineTest, async () => {
   const out = await calc.analyze({
     legs: [
       { type: "short_put", strike: 95, price: 2, qty: 1, iv: 0.3 },
@@ -98,7 +99,7 @@ test("input validation rejects malformed requests", async () => {
   }
 });
 
-test("repriceTheoretical replaces marks with BS values and labels them", async () => {
+test("repriceTheoretical replaces marks with BS values and labels them", engineTest, async () => {
   const out = await calc.analyze({
     legs: [{ type: "long_call", strike: 100, price: 999, qty: 1, iv: 0.2 }],
     spot: 100,
@@ -113,7 +114,7 @@ test("repriceTheoretical replaces marks with BS values and labels them", async (
   assert.equal(out.sizing.totalDebit, 1045);
 });
 
-test("adjustment flow: widening the spread raises max profit and max loss", async () => {
+test("adjustment flow: widening the spread raises max profit and max loss", engineTest, async () => {
   const narrow = await calc.analyze(BULL_CALL);
   const wide = await calc.analyze({
     ...BULL_CALL,

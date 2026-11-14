@@ -1,4 +1,4 @@
-"""Packaged entry point for the math side of Options Detective.
+"""Packaged entry point for the math side of Option Obelisk.
 
 PyInstaller bundles this (onedir) as od-math.exe so end users need no
 Python installation:

@@ -5,6 +5,7 @@ const { exportText, rank, tradeoffPair, createRecommender } = require("../servic
 const { createDetector } = require("../services/detector");
 const { engineClient } = require("../services/mathEngine");
 const { fakeDataLayer, syntheticMarketData } = require("./fixtures");
+const { engineTest } = require("./engineAvailable");
 
 test.after(() => engineClient.shutdown());
 
@@ -99,7 +100,7 @@ test("trade-off facts surface POP, capital, defined risk and simplicity", () => 
   assert.ok(text.includes("time decay"), text);
 });
 
-test("recommend() screens when given a symbol, ranks when given candidates", async () => {
+test("recommend() screens when given a symbol, ranks when given candidates", engineTest, async () => {
   const recommender = createRecommender({
     detector: createDetector({
       dataLayer: fakeDataLayer(syntheticMarketData({ ivRank: 80 })),

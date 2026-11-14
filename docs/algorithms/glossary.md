@@ -1,4 +1,4 @@
-# Options Detective — Algorithm Glossary
+# Option Obelisk — Algorithm Glossary
 
 > Mirror of the in-app glossary (`frontend/src/lib/glossary.ts` is the
 > source of truth rendered by the Help drawer). Conventions here match the

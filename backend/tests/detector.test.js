@@ -6,10 +6,11 @@ const assert = require("node:assert/strict");
 const { engineClient } = require("../services/mathEngine");
 const { createDetector } = require("../services/detector");
 const { fakeDataLayer, syntheticMarketData } = require("./fixtures");
+const { engineTest } = require("./engineAvailable");
 
 test.after(() => engineClient.shutdown());
 
-test("neutral/high-IV screen produces ranked, priced candidates", async () => {
+test("neutral/high-IV screen produces ranked, priced candidates", engineTest, async () => {
   const detector = createDetector({
     dataLayer: fakeDataLayer(syntheticMarketData({ ivRank: 80 })),
   });
@@ -34,7 +35,7 @@ test("neutral/high-IV screen produces ranked, priced candidates", async () => {
   }
 });
 
-test("iron condor economics: maxProfit + maxLoss equals wing width", async () => {
+test("iron condor economics: maxProfit + maxLoss equals wing width", engineTest, async () => {
   const detector = createDetector({
     dataLayer: fakeDataLayer(syntheticMarketData({ ivRank: 80 })),
   });
@@ -47,7 +48,7 @@ test("iron condor economics: maxProfit + maxLoss equals wing width", async () =>
   assert.equal(condor.payoff.breakevens.length, 2);
 });
 
-test("cash-secured put capital is strike x 100 less credit", async () => {
+test("cash-secured put capital is strike x 100 less credit", engineTest, async () => {
   const detector = createDetector({
     dataLayer: fakeDataLayer(syntheticMarketData({ ivRank: 80 })),
   });
@@ -60,7 +61,7 @@ test("cash-secured put capital is strike x 100 less credit", async () => {
   assert.ok(Math.abs(csp.sizing.capitalRequired - (strike * 100 - credit)) < 1);
 });
 
-test("definedRiskOnly drops the short strangle", async () => {
+test("definedRiskOnly drops the short strangle", engineTest, async () => {
   const detector = createDetector({
     dataLayer: fakeDataLayer(syntheticMarketData({ ivRank: 80 })),
   });
@@ -72,7 +73,7 @@ test("definedRiskOnly drops the short strangle", async () => {
   assert.ok(!out.strategiesScreened.includes("short_strangle"));
 });
 
-test("bullish/low-IV screens only call verticals", async () => {
+test("bullish/low-IV screens only call verticals", engineTest, async () => {
   const detector = createDetector({
     dataLayer: fakeDataLayer(syntheticMarketData({ ivRank: 15 })),
   });
@@ -83,7 +84,7 @@ test("bullish/low-IV screens only call verticals", async () => {
   assert.equal(out.candidates.length, 2);
 });
 
-test("stale data is surfaced as a warning, not hidden", async () => {
+test("stale data is surfaced as a warning, not hidden", engineTest, async () => {
   const stale = syntheticMarketData({ ivRank: 80 });
   stale.stale = true;
   stale.dataAgeSeconds = 3600;
@@ -93,7 +94,7 @@ test("stale data is surfaced as a warning, not hidden", async () => {
   assert.ok(out.warnings.some((w) => w.includes("minutes old")));
 });
 
-test("every candidate exposes a score breakdown consistent with its score", async () => {
+test("every candidate exposes a score breakdown consistent with its score", engineTest, async () => {
   const detector = createDetector({
     dataLayer: fakeDataLayer(syntheticMarketData({ ivRank: 80 })),
   });
@@ -115,7 +116,7 @@ test("every candidate exposes a score breakdown consistent with its score", asyn
   }
 });
 
-test("topN is honored and clamped", async () => {
+test("topN is honored and clamped", engineTest, async () => {
   const detector = createDetector({
     dataLayer: fakeDataLayer(syntheticMarketData({ ivRank: 80 })),
   });
@@ -126,7 +127,7 @@ test("topN is honored and clamped", async () => {
   assert.ok(silly.candidates.length <= 200);
 });
 
-test("sizing respects the risk budget", async () => {
+test("sizing respects the risk budget", engineTest, async () => {
   const detector = createDetector({
     dataLayer: fakeDataLayer(syntheticMarketData({ ivRank: 80 })),
   });
