@@ -34,11 +34,14 @@ import sys
 
 import numpy as np
 
+import american
 import black_scholes
+import bsm
 import iv_solver
 import payoff
 import probability
 import sizing
+import volmodel
 
 DISPATCH = {
     "bs_call_price": black_scholes.bs_call_price,
@@ -54,6 +57,15 @@ DISPATCH = {
     "prob_max_profit": probability.prob_max_profit,
     "risk_based_size": sizing.risk_based_size,
     "position_summary": sizing.position_summary,
+    # v2 pricing core (Phase 2): dividends, per-expiry rates, American exercise, smiles
+    "bsm_price": bsm.bsm_price,
+    "bsm_greeks": bsm.bsm_greeks,
+    "bsm_implied_vol": bsm.bsm_implied_vol,
+    "american_price": american.american_price,
+    "american_greeks": american.american_greeks,
+    "exercise_style": american.exercise_style,
+    "smile_fit": volmodel.smile_fit,
+    "smile_iv": volmodel.smile_iv,
 }
 
 

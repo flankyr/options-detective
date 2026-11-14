@@ -178,12 +178,16 @@ function createDetector({ dataLayer = defaultDataLayer, engineBatch = callEngine
       if (dte < opts.minDTE || dte > opts.maxDTE) continue;
       const chain = data.chains[expiration];
       if (!chain) continue;
-      const atmIv = atmIvOf(chain, data.price) ?? data.atmIv;
+      // Phase 2: the fitted smile's ATM vol for this expiry when the data
+      // layer produced one; the vendor ATM average otherwise.
+      const smile = data.smiles?.[expiration];
+      const atmIv = smile?.atmIv ?? atmIvOf(chain, data.price) ?? data.atmIv;
       if (!atmIv) continue; // cannot price probabilities honestly without an IV
+      const r = data.rates?.[expiration] ?? opts.riskFreeRate;
       const ctx = { spot: data.price, atmIv, dte, calls: chain.calls, puts: chain.puts, allowIndicative };
       for (const strategyType of strategies) {
         for (const draft of buildDrafts(strategyType, ctx)) {
-          drafts.push({ ...draft, expiration, dte, atmIv });
+          drafts.push({ ...draft, expiration, dte, atmIv, r, smileMethod: smile?.method ?? null });
         }
       }
     }
@@ -199,8 +203,9 @@ function createDetector({ dataLayer = defaultDataLayer, engineBatch = callEngine
     for (const draft of drafts) {
       const legs = engineLegs(draft.legs);
       const T = draft.dte / 365;
+      const q = data.dividendYield ?? 0;
       const base = {
-        legs, current_price: data.price, T, sigma: draft.atmIv, r: opts.riskFreeRate,
+        legs, current_price: data.price, T, sigma: draft.atmIv, r: draft.r,
       };
       const entry = { summary: requests.length };
       requests.push({ fn: "payoff_summary", args: { legs } });
@@ -215,9 +220,14 @@ function createDetector({ dataLayer = defaultDataLayer, engineBatch = callEngine
           continue;
         }
         entry.greeks.push(requests.length);
+        // Phase 2: Black-Scholes-Merton with the dividend yield and this
+        // expiry's rate; the leg's vol is the smile vol at its strike.
         requests.push({
-          fn: leg.type.endsWith("call") ? "bs_call_greeks" : "bs_put_greeks",
-          args: { S: data.price, K: leg.strike, T, r: opts.riskFreeRate, sigma: leg.iv ?? draft.atmIv },
+          fn: "bsm_greeks",
+          args: {
+            S: data.price, K: leg.strike, T, r: draft.r, q,
+            sigma: leg.iv ?? draft.atmIv, option_type: leg.type.endsWith("call") ? "call" : "put",
+          },
         });
       }
       index.push(entry);
@@ -284,10 +294,15 @@ function createDetector({ dataLayer = defaultDataLayer, engineBatch = callEngine
         liquidity: liquidityOf(draft.legs, data.dataAgeSeconds),
         meta: {
           sigma: draft.atmIv,
-          riskFreeRate: opts.riskFreeRate,
+          riskFreeRate: draft.r,
+          dividendYield: data.dividendYield ?? 0,
           spot: data.price,
           stale: data.stale,
           marksQuality: allowIndicative ? "indicative" : "live",
+          provider: data.provider ?? null,
+          asof: data.asof ?? null,
+          volModel: draft.smileMethod ? `smile:${draft.smileMethod}` : "atm",
+          exerciseStyle: data.exerciseStyle ?? null,
         },
       });
     });

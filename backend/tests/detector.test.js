@@ -141,3 +141,33 @@ test("sizing respects the risk budget", engineTest, async () => {
     }
   }
 });
+
+// ---- Phase 2: smile ATM vol and per-expiry rates reach the engine ------------
+test("Phase 2: detector prices with the smile's ATM vol, the expiry's rate and the dividend yield", engineTest, async () => {
+  const data = syntheticMarketData({ spot: 100, iv: 0.25 });
+  data.smiles = Object.fromEntries(data.expirations.map((e) => [e, { method: "svi", atmIv: 0.31 }]));
+  data.rates = Object.fromEntries(data.expirations.map((e) => [e, 0.0123]));
+  data.dividendYield = 0.02;
+  data.provider = "archive"; data.asof = "2026-06-12"; data.exerciseStyle = "american";
+  const seen = [];
+  const det = createDetector({
+    dataLayer: fakeDataLayer(data),
+    engineBatch: async (reqs) => {
+      seen.push(...reqs);
+      const { callEngineBatch } = require("../services/mathEngine");
+      return callEngineBatch(reqs);
+    },
+  });
+  const res = await det.screen({ symbol: "TEST", directionalView: "neutral", minDTE: 1, maxDTE: 400 });
+  const greeks = seen.filter((r) => r.fn === "bsm_greeks");
+  assert.ok(greeks.length > 0);
+  assert.ok(greeks.every((r) => r.args.q === 0.02 && r.args.r === 0.0123));
+  const pops = seen.filter((r) => r.fn === "prob_of_profit");
+  assert.ok(pops.every((r) => r.args.sigma === 0.31 && r.args.r === 0.0123));
+  const c = res.candidates[0];
+  assert.equal(c.meta.volModel, "smile:svi");
+  assert.equal(c.meta.dividendYield, 0.02);
+  assert.equal(c.meta.provider, "archive");
+  assert.equal(c.meta.exerciseStyle, "american");
+  assert.ok(c.legs.some((l) => l.ivSource));
+});

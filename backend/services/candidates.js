@@ -49,7 +49,12 @@ function optionLeg(type, contract) {
     strike: contract.strike,
     price: contract.mid,
     qty: 1,
-    iv: contract.impliedVolatility,
+    // Phase 2: the fitted-smile vol at this strike is the vol the engine uses
+    // (consistent across greeks and probabilities); our own solved IV next,
+    // the vendor's number last. ivSource says which one won.
+    iv: contract.ivSmile ?? contract.ivModel ?? contract.impliedVolatility,
+    ivSource: contract.ivSmile != null ? "smile" : (contract.ivModel != null ? "model" : "vendor"),
+    ivVendor: contract.impliedVolatility,
     spreadPct: contract.spreadPct,
     volume: contract.volume,
     openInterest: contract.openInterest,

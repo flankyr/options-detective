@@ -143,3 +143,25 @@ test("empty chain yields no drafts, not errors", () => {
     assert.equal(buildDraft(s, empty), null, s);
   }
 });
+
+// ---- Phase 2: vol source precedence -------------------------------------------
+const { buildDraft: buildDraft2 } = require("../services/candidates");
+
+test("Phase 2: legs take the smile vol first, our solved IV next, vendor IV last", () => {
+  const base = { bid: 1, ask: 1.1, mid: 1.05, volume: 500, openInterest: 1000, spreadPct: 0.02, illiquid: false };
+  const ctx = {
+    spot: 100, atmIv: 0.25, dte: 30,
+    puts: [
+      { ...base, strike: 96, impliedVolatility: 0.30, ivModel: 0.31, ivSmile: 0.315 },
+      { ...base, strike: 92, impliedVolatility: 0.33, ivModel: 0.34 },
+      { ...base, strike: 88, impliedVolatility: 0.36 },
+    ],
+    calls: [],
+  };
+  const a = buildDraft2("cash_secured_put", ctx, { otmPct: 0.04 }).legs[0];
+  assert.equal(a.iv, 0.315); assert.equal(a.ivSource, "smile"); assert.equal(a.ivVendor, 0.30);
+  const b = buildDraft2("cash_secured_put", ctx, { otmPct: 0.08 }).legs[0];
+  assert.equal(b.iv, 0.34); assert.equal(b.ivSource, "model");
+  const c = buildDraft2("cash_secured_put", ctx, { otmPct: 0.12 }).legs[0];
+  assert.equal(c.iv, 0.36); assert.equal(c.ivSource, "vendor");
+});

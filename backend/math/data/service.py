@@ -6,7 +6,9 @@ import json
 import os
 from datetime import date
 
+import american
 import archive
+import volmodel
 
 from .archive_provider import ArchiveProvider
 from .base import Provider, Unsupported
@@ -126,6 +128,13 @@ class DataService:
             if payload.get("dividendYield") is None and asof is None:
                 payload["dividendYield"] = self.providers["yfinance"].dividend_yield(
                     symbol, payload["price"]) if "yfinance" in self.providers else None
+            # Phase 2: solve our own IVs and fit one smile per expiry. A failure
+            # here must not hide the chain: report it and return the raw payload.
+            payload["exerciseStyle"] = american.exercise_style(symbol)
+            try:
+                volmodel.enrich(payload)
+            except Exception as exc:
+                payload["volModelError"] = f"{type(exc).__name__}: {exc}"
             return payload
         mode = "live" if asof is None else f"historical ({asof.isoformat()})"
         detail = "; ".join(f"{a['provider']}: {a['error']}" for a in attempts) or "no providers"

@@ -17,6 +17,7 @@ const LEG_TYPES = new Set([
 
 const DEFAULTS = {
   riskFreeRate: Number(process.env.RISK_FREE_RATE ?? 0.04),
+  dividendYield: 0, // Phase 2: continuous yield q for BSM pricing/greeks
   capital: 25_000,
   riskTolerancePct: 2,
   maxLossDollars: null,
@@ -54,6 +55,14 @@ function validateInputs({ legs, spot, dte, sigma }) {
   }
 }
 
+function validateYield(q) {
+  if (q === undefined || q === null) return 0;
+  if (!(Number.isFinite(q) && q >= 0 && q < 1)) {
+    throw new CalcInputError("dividendYield must be a decimal in [0, 1)");
+  }
+  return q;
+}
+
 function resolveSigma(sigma, legs) {
   if (Number.isFinite(sigma) && sigma > 0) return sigma;
   const ivs = legs.map((l) => l.iv).filter((v) => Number.isFinite(v) && v > 0);
@@ -69,6 +78,7 @@ function createCalculator({ engineBatch = callEngineBatch } = {}) {
     const opts = { ...DEFAULTS, ...params };
     validateInputs(opts);
     const sigma = resolveSigma(opts.sigma, opts.legs);
+    const q = validateYield(opts.dividendYield);
     const T = opts.dte / 365;
 
     // Strike adjustments have no market quote to lean on; reprice the legs
@@ -77,10 +87,11 @@ function createCalculator({ engineBatch = callEngineBatch } = {}) {
       const priceRequests = opts.legs
         .filter((leg) => !leg.type.endsWith("stock"))
         .map((leg) => ({
-          fn: leg.type.endsWith("call") ? "bs_call_price" : "bs_put_price",
+          fn: "bsm_price",
           args: {
-            S: opts.spot, K: leg.strike, T, r: opts.riskFreeRate,
+            S: opts.spot, K: leg.strike, T, r: opts.riskFreeRate, q,
             sigma: (Number.isFinite(leg.iv) && leg.iv > 0) ? leg.iv : sigma,
+            option_type: leg.type.endsWith("call") ? "call" : "put",
           },
         }));
       const priced = await engineBatch(priceRequests);
@@ -107,10 +118,11 @@ function createCalculator({ engineBatch = callEngineBatch } = {}) {
       ...opts.legs.map((leg) => (leg.type.endsWith("stock")
         ? null
         : {
-          fn: leg.type.endsWith("call") ? "bs_call_greeks" : "bs_put_greeks",
+          fn: "bsm_greeks",
           args: {
-            S: opts.spot, K: leg.strike, T, r: opts.riskFreeRate,
+            S: opts.spot, K: leg.strike, T, r: opts.riskFreeRate, q,
             sigma: (Number.isFinite(leg.iv) && leg.iv > 0) ? leg.iv : sigma,
+            option_type: leg.type.endsWith("call") ? "call" : "put",
           },
         })).filter(Boolean),
     ];
@@ -167,7 +179,7 @@ function createCalculator({ engineBatch = callEngineBatch } = {}) {
         capitalApproximate: capReq.approximate,
       },
       inputs: {
-        spot: opts.spot, dte: opts.dte, sigma, riskFreeRate: opts.riskFreeRate,
+        spot: opts.spot, dte: opts.dte, sigma, riskFreeRate: opts.riskFreeRate, dividendYield: q,
         capital: opts.capital, riskTolerancePct: opts.riskTolerancePct,
         strategyType: opts.strategyType ?? null,
       },
