@@ -9,6 +9,7 @@
 | `GET /data/providers` · `PUT /data/providers` | provider order, capabilities, Massive key, rate-curve source |
 | `POST /data/rates/refresh` | re-fetch the US Treasury par curve |
 | `GET /archive/status` · `POST /archive/snapshot` · `PUT /archive/settings` | daily chain archive (Phase 0) |
+| `GET /research/strategies` · `GET /research/runs` · `POST /research/backtest` · `POST /research/walkforward` · `GET /research/forecast-walkforward/:symbol` | simulator (Phase 5), see `docs/algorithms/simulator.md` |
 | `POST /detect` | screen all expirations × eligible strategies → ranked candidates |
 | `POST /calculate` | full analysis of one position (greeks, payoff, POP, sizing) |
 | `POST /calculate/engine` | raw math engine passthrough |

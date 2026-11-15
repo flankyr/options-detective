@@ -56,4 +56,8 @@ contextBridge.exposeInMainWorld("optionObelisk", {
   dataProviders: () => ipcRenderer.invoke("api:data:providers"),
   dataProvidersUpdate: (body) => ipcRenderer.invoke("api:data:providers:update", body),
   dataRatesRefresh: () => ipcRenderer.invoke("api:data:rates:refresh"),
+  researchStrategies: () => ipcRenderer.invoke("api:research:strategies"),
+  researchRuns: () => ipcRenderer.invoke("api:research:runs"),
+  researchBacktest: (body) => ipcRenderer.invoke("api:research:backtest", body),
+  researchWalkforward: (body) => ipcRenderer.invoke("api:research:walkforward", body),
 });

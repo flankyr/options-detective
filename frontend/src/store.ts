@@ -32,7 +32,7 @@ import {
 export { readLastScreen, DEFAULT_SIDEBAR_ORDER } from "./lib/storePersist";
 export type { SidebarSection, WeightProfile } from "./lib/storePersist";
 
-export type View = "home" | "detector" | "calculator" | "recommender" | "journal" | "paper" | "etf" | "ics" | "analytics";
+export type View = "home" | "detector" | "calculator" | "recommender" | "journal" | "paper" | "etf" | "ics" | "analytics" | "research";
 
 // stamp <html> classes (motion-off, fx-no-*) before the first render so
 // entrance animations and effect gating resolve correctly from frame one

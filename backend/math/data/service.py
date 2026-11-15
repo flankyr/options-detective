@@ -89,7 +89,7 @@ class DataService:
 
     # ---- main entry -----------------------------------------------------
     def get_chain(self, symbol, asof=None, *, max_expirations=6, min_dte=1, max_dte=120,
-                  provider=None):
+                  provider=None, enrich=True):
         """Normalized chain for `symbol` as of `asof` (None = live).
 
         Tries providers in order; the first that is configured and succeeds
@@ -132,10 +132,11 @@ class DataService:
             # Phase 2: solve our own IVs and fit one smile per expiry. A failure
             # here must not hide the chain: report it and return the raw payload.
             payload["exerciseStyle"] = american.exercise_style(symbol)
-            try:
-                volmodel.enrich(payload)
-            except Exception as exc:
-                payload["volModelError"] = f"{type(exc).__name__}: {exc}"
+            if enrich:  # the backtester skips this on pure marking days
+                try:
+                    volmodel.enrich(payload)
+                except Exception as exc:
+                    payload["volModelError"] = f"{type(exc).__name__}: {exc}"
             return payload
         mode = "live" if asof is None else f"historical ({asof.isoformat()})"
         detail = "; ".join(f"{a['provider']}: {a['error']}" for a in attempts) or "no providers"
@@ -167,10 +168,17 @@ class DataService:
         raise Unsupported(f"no source has price history for {symbol.upper()}: "
                           + "; ".join(f"{a['provider']}: {a['error']}" for a in attempts))
 
-    def forecast(self, symbol, horizon_days=21, method="har", iv_atm=None):
+    def forecast(self, symbol, horizon_days=21, method="har", iv_atm=None, asof=None):
         """Realized-vol forecast at `horizon_days` trading days + VRP against
-        `iv_atm` (pass the chain's ATM vol at the matching expiry)."""
-        hist = self.underlying_history(symbol)
+        `iv_atm` (pass the chain's ATM vol at the matching expiry). `asof`
+        (date) limits the history to that day: the backtester's no-look-ahead rule."""
+        if isinstance(asof, str):
+            asof = date.fromisoformat(asof)
+        hist = self.underlying_history(symbol, end=asof) if asof else self.underlying_history(symbol)
+        if asof:
+            hist["rows"] = [(d, c) for d, c in hist["rows"] if d <= asof.isoformat()]
+            if len(hist["rows"]) < 61:
+                raise Unsupported(f"only {len(hist['rows'])} closes up to {asof.isoformat()}; need 61")
         closes = [c for _, c in hist["rows"]]
         fc = volforecast.forecast(closes, int(horizon_days), method)
         fc["symbol"] = symbol.upper()
@@ -185,6 +193,8 @@ class DataService:
             dates = sorted(closes_by_date)
             import numpy as np
             for d, iv in arch.atm_iv_history(symbol):
+                if asof and d > asof.isoformat():
+                    continue
                 idx = [i for i, dd in enumerate(dates) if dd <= d]
                 if len(idx) >= 22:
                     window = np.array([closes_by_date[dates[i]] for i in idx[-22:]])

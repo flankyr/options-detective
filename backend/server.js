@@ -13,6 +13,7 @@ const marketRouter = require("./routes/market");
 const { router: authRouter, requireAccount } = require("./routes/auth");
 const accountRouter = require("./routes/account");
 const archiveRouter = require("./routes/archive");
+const researchRouter = require("./routes/research");
 const { archiveService } = require("./services/archive");
 const { callEngine, engineClient } = require("./services/mathEngine");
 
@@ -70,6 +71,7 @@ app.use("/account", requireAccount, accountRouter); // v1.7.2 backup/restore
 app.use("/screener", screenerRouter);
 app.use("/market", marketRouter);
 app.use("/archive", archiveRouter); // Phase 0: daily chain snapshots
+app.use("/research", researchRouter); // Phase 5: simulator
 
 // JSON everywhere: unknown routes and unhandled errors never leak HTML.
 app.use((req, res) => {

@@ -11,6 +11,7 @@ Python installation:
     od-math.exe market_pulse        sidebar quotes + news: JSON on stdin
     od-math.exe archive             daily chain snapshots: JSON on stdin
     od-math.exe datasvc             data platform (chain/status/config/rates): JSON on stdin
+    od-math.exe simsvc              simulator (strategies/run/walkforward): JSON on stdin
 
 One executable for all entry points keeps a single copy of numpy/scipy in
 the bundle. Exit codes mirror the dev-mode scripts: 0 whenever a JSON
@@ -44,8 +45,11 @@ def main() -> int:
     if command in ("data", "datasvc"):
         import datasvc
         return datasvc.main()
+    if command in ("sim", "simsvc"):
+        import simsvc
+        return simsvc.main()
     json.dump({"ok": False,
-               "error": "usage: od-math [engine [--serve] | market_data | etf_metrics | etf_holdings | market_pulse | archive | data]"},
+               "error": "usage: od-math [engine [--serve] | market_data | etf_metrics | etf_holdings | market_pulse | archive | data | sim]"},
               sys.stdout)
     sys.stdout.write("\n")
     return 2

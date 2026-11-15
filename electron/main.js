@@ -69,6 +69,10 @@ function registerIpc() {
   ipcMain.handle("api:data:providers", () => forward("/data/providers"));
   ipcMain.handle("api:data:providers:update", (_event, body) => forward("/data/providers", body, "PUT"));
   ipcMain.handle("api:data:rates:refresh", () => forward("/data/rates/refresh", {}));
+  ipcMain.handle("api:research:strategies", () => forward("/research/strategies"));
+  ipcMain.handle("api:research:runs", () => forward("/research/runs"));
+  ipcMain.handle("api:research:backtest", (_event, body) => forward("/research/backtest", body));
+  ipcMain.handle("api:research:walkforward", (_event, body) => forward("/research/walkforward", body));
   ipcMain.handle("api:auth:state", () => forward("/auth/state"));
   ipcMain.handle("api:auth:register", (_event, body) => forward("/auth/register", body));
   ipcMain.handle("api:auth:login", (_event, body) => forward("/auth/login", body));

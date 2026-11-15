@@ -38,7 +38,7 @@ def handle(req: dict, service: DataService | None = None) -> dict:
             result = svc.underlying_history(str(req.get("symbol", "")).strip(), int(req.get("days", 400)))
         elif cmd == "forecast":
             result = svc.forecast(str(req.get("symbol", "")).strip(), int(req.get("horizon", 21)),
-                                  req.get("method", "har"), req.get("iv_atm"))
+                                  req.get("method", "har"), req.get("iv_atm"), req.get("asof"))
         elif cmd == "status":
             result = svc.status()
         elif cmd == "config":
