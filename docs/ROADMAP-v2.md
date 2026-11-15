@@ -3,6 +3,23 @@
 Drafted 2026-11-14 from a full repo audit at v1.10.6 (commit b21663d).
 Owner: Usmaan Aslam. Implementer: Claude (direct edits on feature branches, PR to `main`).
 
+## Status (2026-11-15)
+
+All eight phases are implemented on stacked feature branches
+(`feature/p0-archive` → … → `feature/p7-productisation`), each with green
+test suites (1,397 pytest / 142 node / tsc) in a Linux sandbox. What has NOT
+happened yet, and only the owner can do:
+
+| Item | Why it waits |
+|---|---|
+| Push branches, open PRs, merge to `main` | no GitHub credentials in the build session |
+| `npm install` in backend/ and frontend/, `pip install -r requirements-dev.txt` | new dev dependencies and Python packages (pandas, pyarrow) |
+| `vite build` and `npm run dist` on Windows | the sandbox cannot run the native rollup binary or PyInstaller |
+| First live call to Massive / DoltHub / Treasury CSV | no network from the sandbox; providers were built against recorded fixtures |
+| First archive snapshot (Settings → Data → Snapshot now) | starts the history the backtester needs |
+| Repository rename to `option-obelisk`, branch cleanup (`docs/branch-cleanup.cmd`) | owner decision, already approved in principle |
+| Code signing, `GH_TOKEN` for the first published release | owner accounts |
+
 ## 0. Where this plan is going
 
 Goal: turn Option Obelisk from a polished *display* of Black-Scholes numbers into a
