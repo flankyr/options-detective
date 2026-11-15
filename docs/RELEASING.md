@@ -58,8 +58,38 @@ gh release create vX.Y.Z "electron/release/Option-Obelisk-Setup-X.Y.Z.exe" `
 gh release view vX.Y.Z
 ```
 
-The installer is unsigned until Phase 7 of `ROADMAP-v2.md`; SmartScreen shows
-"More info → Run anyway" on first launch.
+## Code signing (Phase 7, owner action)
+
+Unsigned installers trip SmartScreen ("More info → Run anyway") and the
+auto-updater cannot verify downloads. Two routes:
+
+1. **Azure Trusted Signing** (~US$10/month, no hardware token). Create a
+   Trusted Signing account and certificate profile, install the
+   `Microsoft.Trusted.Signing.Client`, then in `electron/package.json` set
+   `build.win.signtoolOptions` / `azureSignOptions` per electron-builder's
+   docs and remove `"signAndEditExecutable": false`.
+2. **OV code-signing certificate** (~US$200–400/yr, hardware token since 2023).
+   Set `build.win.certificateSubjectName` to the certificate's subject and
+   let electron-builder call signtool; remove `"signAndEditExecutable": false`.
+
+Either way, CI needs the credentials as repository secrets; never commit them.
+
+## Auto-update
+
+`electron-updater` checks GitHub Releases (`build.publish`) on launch of a
+packaged build and installs on quit. `npm run dist` must therefore be run
+with `GH_TOKEN` set (or `electron-builder --publish always`) so the
+`latest.yml` manifest is uploaded beside the installer; without it clients
+see no update. The repository in `build.publish` is `kmptrades/option-obelisk`
+(after the rename); GitHub redirects the old name for clones but the updater
+needs the current one.
+
+## Credentials
+
+The packaged app encrypts provider keys with Electron `safeStorage` (DPAPI
+on Windows) into `%APPDATA%\Option Obelisk\secrets.json` and passes them to
+the backend only through its environment. The dev server, which has no
+keychain, keeps them in `backend/data/providers.json` (gitignored).
 
 ## Chain archive (Phase 0)
 

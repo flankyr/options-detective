@@ -1,5 +1,43 @@
-const { app, BrowserWindow, clipboard, ipcMain, shell, utilityProcess } = require("electron");
+const { app, BrowserWindow, clipboard, ipcMain, safeStorage, shell, utilityProcess } = require("electron");
+const fs = require("fs");
 const path = require("path");
+
+// Phase 7: provider credentials are encrypted at rest with the OS keychain
+// (DPAPI on Windows, Keychain on macOS) through Electron safeStorage and
+// handed to the backend only through its environment / a localhost call.
+const SECRETS_FILE = () => path.join(app.getPath("userData"), "secrets.json");
+
+function readSecrets() {
+  try {
+    const raw = JSON.parse(fs.readFileSync(SECRETS_FILE(), "utf8"));
+    const out = {};
+    for (const [k, b64] of Object.entries(raw)) {
+      try {
+        out[k] = safeStorage.isEncryptionAvailable()
+          ? safeStorage.decryptString(Buffer.from(b64, "base64"))
+          : Buffer.from(b64, "base64").toString("utf8");
+      } catch { /* unreadable entry: skip */ }
+    }
+    return out;
+  } catch {
+    return {};
+  }
+}
+
+function writeSecret(name, value) {
+  let raw = {};
+  try { raw = JSON.parse(fs.readFileSync(SECRETS_FILE(), "utf8")); } catch { /* new file */ }
+  if (!value) {
+    delete raw[name];
+  } else {
+    const buf = safeStorage.isEncryptionAvailable()
+      ? safeStorage.encryptString(String(value))
+      : Buffer.from(String(value), "utf8"); // no keychain: plain, flagged in the UI
+    raw[name] = buf.toString("base64");
+  }
+  fs.mkdirSync(path.dirname(SECRETS_FILE()), { recursive: true });
+  fs.writeFileSync(SECRETS_FILE(), JSON.stringify(raw), { mode: 0o600 });
+}
 
 const BACKEND_PORT = Number(process.env.PORT || 3001);
 const BACKEND_URL = `http://localhost:${BACKEND_PORT}`;
@@ -15,7 +53,9 @@ function startBackend() {
   const backendDir = app.isPackaged
     ? path.join(process.resourcesPath, "backend")
     : path.join(__dirname, "..", "backend");
-  const env = { ...process.env, PORT: String(BACKEND_PORT) };
+  const env = { ...process.env, PORT: String(BACKEND_PORT), OD_SECRETS_MANAGED: "1" };
+  const secrets = readSecrets();
+  if (secrets.massiveApiKey) env.MASSIVE_API_KEY = secrets.massiveApiKey;
   if (app.isPackaged) {
     env.OD_MATH_BIN = path.join(process.resourcesPath, "od-math", "od-math.exe");
     env.OD_DATA_DIR = app.getPath("userData"); // trade journal location
@@ -67,7 +107,16 @@ function registerIpc() {
   ipcMain.handle("api:archive:snapshot", (_event, body) => forward("/archive/snapshot", body ?? {}));
   ipcMain.handle("api:archive:settings", (_event, body) => forward("/archive/settings", body, "PUT"));
   ipcMain.handle("api:data:providers", () => forward("/data/providers"));
-  ipcMain.handle("api:data:providers:update", (_event, body) => forward("/data/providers", body, "PUT"));
+  ipcMain.handle("api:data:providers:update", (_event, body) => {
+    if (body && typeof body.massiveApiKey === "string") {
+      writeSecret("massiveApiKey", body.massiveApiKey.trim());
+    }
+    return forward("/data/providers", body, "PUT");
+  });
+  ipcMain.handle("api:secrets:status", () => ({
+    encrypted: safeStorage.isEncryptionAvailable(),
+    file: SECRETS_FILE(),
+  }));
   ipcMain.handle("api:data:rates:refresh", () => forward("/data/rates/refresh", {}));
   ipcMain.handle("api:research:strategies", () => forward("/research/strategies"));
   ipcMain.handle("api:research:runs", () => forward("/research/runs"));
@@ -161,9 +210,26 @@ function createWindow() {
   }
 }
 
+// Phase 7: auto-update from GitHub Releases (electron-builder `publish`).
+// Silent on failure; unsigned builds still update but Windows shows
+// SmartScreen on the installer until Phase 7's signing step is done.
+function setupAutoUpdate() {
+  if (!app.isPackaged) return;
+  try {
+    const { autoUpdater } = require("electron-updater");
+    autoUpdater.logger = console;
+    autoUpdater.autoDownload = true;
+    autoUpdater.on("error", (err) => console.error("[updater]", err?.message || err));
+    autoUpdater.checkForUpdatesAndNotify().catch(() => {});
+  } catch (err) {
+    console.error("[updater] unavailable:", err?.message || err);
+  }
+}
+
 app.whenReady().then(async () => {
   registerIpc();
   startBackend();
+  setupAutoUpdate();
   const healthy = await waitForBackend();
   if (!healthy) {
     console.error("[electron] backend did not become healthy within 20s — window will show errors");

@@ -5,13 +5,14 @@
 const { spawn } = require("child_process");
 
 const { mathCommand } = require("./python");
+const secrets = require("./secrets");
 
 class PythonDomainError extends Error {}
 
 function runPython(entry, request, { timeoutMs = 120_000, extraArgs = [] } = {}) {
   return new Promise((resolve, reject) => {
     const cmd = mathCommand(entry, extraArgs);
-    const proc = spawn(cmd.bin, cmd.args, { cwd: cmd.cwd, windowsHide: true });
+    const proc = spawn(cmd.bin, cmd.args, { cwd: cmd.cwd, windowsHide: true, env: secrets.childEnv() });
     let stdout = "";
     let stderr = "";
     const timer = setTimeout(() => {

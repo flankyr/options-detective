@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react";
 import { api, type DataProvidersStatus } from "../../lib/api";
+
+type SecretsStatus = { encrypted: boolean; file: string };
 import { friendlyError } from "../../lib/friendlyError";
 import { useStore } from "../../store";
 import Button from "../ui/Button";
@@ -22,9 +24,12 @@ export function ProvidersSection() {
   const [key, setKey] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [secrets, setSecrets] = useState<SecretsStatus | null>(null);
 
   async function refresh() {
     try {
+      const w = window as { optionObelisk?: { secretsStatus?: () => Promise<SecretsStatus> } };
+      if (w.optionObelisk?.secretsStatus) setSecrets(await w.optionObelisk.secretsStatus());
       setStatus(await api.dataProviders());
       setError(null);
     } catch (err) {
@@ -82,8 +87,13 @@ export function ProvidersSection() {
       <div className="mb-3 rounded-md bg-dark-700/50 p-4">
         <div className="text-sm font-medium">Massive API key</div>
         <div className="mt-0.5 text-xs text-content-3">
-          Free "Options Basic" plan at massive.com. Stored locally in <code>providers.json</code>
-          {" "}(plain text until v2.2 moves it to the OS keychain). {massiveSet ? "A key is set." : "No key yet."}
+          Free "Options Basic" plan at massive.com.{" "}
+          {secrets
+            ? secrets.encrypted
+              ? "Stored encrypted with the OS keychain (Electron safeStorage) and handed to the engine only in memory."
+              : "No OS keychain available on this machine: stored locally without encryption."
+            : "In the dev server the key is kept in providers.json (plain text); the packaged app encrypts it with the OS keychain."}
+          {" "}{massiveSet ? "A key is set." : "No key yet."}
         </div>
         <div className="mt-2 flex items-end gap-2">
           <FormInput label="API key" type="password" value={key} placeholder={massiveSet ? "•••••••• (replace)" : "paste key"}

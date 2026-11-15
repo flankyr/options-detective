@@ -211,7 +211,8 @@ class DataService:
             "historicalOrder": self.hist_order(),
             "providers": [p.describe() for p in self.providers.values()],
             "rates": self.rates.describe(),
-            "config": {k: ("set" if "Key" in k else v) for k, v in self.config.items()},
+            "config": {**{k: ("set" if "Key" in k else v) for k, v in self.config.items()},
+                       **({"massiveApiKey": "set"} if os.environ.get("MASSIVE_API_KEY") else {})},
             "archiveSymbols": archive.status(arch.root) if arch else {},
         }
 

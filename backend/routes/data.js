@@ -8,6 +8,7 @@
 const { Router } = require("express");
 const { dataLayer, DataError } = require("../services/dataLayer");
 const { runPython, PythonDomainError } = require("../services/pythonRun");
+const secrets = require("../services/secrets");
 
 const router = Router();
 
@@ -34,7 +35,13 @@ router.get("/providers", async (_req, res) => {
 router.put("/providers", async (req, res) => {
   const body = req.body || {};
   const patch = {};
-  if (typeof body.massiveApiKey === "string") patch.massiveApiKey = body.massiveApiKey.trim() || null;
+  if (typeof body.massiveApiKey === "string") {
+    const key = body.massiveApiKey.trim() || null;
+    // Phase 7: the key lives in process memory and reaches Python via env.
+    // It is written to providers.json only in dev (no Electron safeStorage).
+    secrets.set("massiveApiKey", key);
+    if (!secrets.managed()) patch.massiveApiKey = key;
+  }
   for (const key of ["liveOrder", "historicalOrder"]) {
     if (Array.isArray(body[key])) patch[key] = body[key].map(String);
   }

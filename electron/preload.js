@@ -60,4 +60,5 @@ contextBridge.exposeInMainWorld("optionObelisk", {
   researchRuns: () => ipcRenderer.invoke("api:research:runs"),
   researchBacktest: (body) => ipcRenderer.invoke("api:research:backtest", body),
   researchWalkforward: (body) => ipcRenderer.invoke("api:research:walkforward", body),
+  secretsStatus: () => ipcRenderer.invoke("api:secrets:status"),
 });

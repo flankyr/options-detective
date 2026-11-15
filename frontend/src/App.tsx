@@ -24,6 +24,7 @@ import SplashScreen from "./components/shared/SplashScreen";
 import { RightSidebar } from "./components/shared/Sidebars";
 import AuthGate from "./components/AuthGate";
 import ViewTransition from "./components/shared/ViewTransition";
+import { DisclaimerFooter } from "./components/shared/Disclaimer";
 import { useMode } from "./contexts/ModeContext";
 import { useAlerts } from "./lib/useAlerts";
 import { useStore, type View } from "./store";
@@ -290,6 +291,7 @@ function MainApp() {
         </main>
         <RightSidebar />
       </div>
+      <DisclaimerFooter />
 
       {/* v1.5.1 help affordance, bottom-left of Home. Rendered at the app
           root (not inside the view) so `fixed` anchors to the viewport, a

@@ -1,6 +1,6 @@
 {
   "name": "option-obelisk-electron",
-  "version": "2.1.0",
+  "version": "2.2.0",
   "private": true,
   "description": "Electron shell for Option Obelisk (formerly Options Detective)",
   "main": "main.js",
@@ -46,9 +46,7 @@
       }
     ],
     "win": {
-      "target": [
-        "nsis"
-      ],
+      "target": "nsis",
       "icon": "build/icon.png",
       "signAndEditExecutable": false
     },
@@ -64,6 +62,16 @@
       "runAfterFinish": true,
       "artifactName": "Option-Obelisk-Setup-${version}.${ext}"
     },
-    "compression": "normal"
+    "compression": "normal",
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "kmptrades",
+        "repo": "option-obelisk"
+      }
+    ]
+  },
+  "dependencies": {
+    "electron-updater": "^6.3.9"
   }
 }
