@@ -54,6 +54,10 @@ export interface Leg {
   openInterest?: number;
   greeks?: Greeks;      // per-share greeks from the engine
   theoretical?: boolean; // price is BS theoretical, not a market mark
+  ivSource?: "smile" | "model" | "vendor"; // Phase 2: which vol the engine used
+  ivVendor?: number | null;
+  delta?: number;
+  expiration?: string;   // cross-expiry legs (calendar/diagonal)
 }
 
 export interface PayoffPoint {
@@ -85,6 +89,14 @@ export interface Sizing {
   pctOfAccount: number;
   capitalRequired: number;
   capitalApproximate: boolean;
+  // Phase 4 sizing v2
+  binding?: "riskBudget" | "buyingPower" | "kelly";
+  limits?: Record<string, number>;
+  stressLossPerUnit?: number;
+  stressSigmas?: number;
+  riskBudgetExceeded?: boolean;
+  stressLossPctOfAccount?: number;
+  capitalBasis?: string;
 }
 
 export type ScoreComponentKey = "pop" | "ror" | "theta" | "capEff" | "liquidity";
@@ -124,11 +136,50 @@ export interface Candidate {
     spot: number;
     stale: boolean;
     marksQuality: "live" | "indicative";
+    // Phase 2-4 additions
+    dividendYield?: number;
+    forward?: number;
+    provider?: string | null;
+    asof?: string | null;
+    volModel?: string;
+    exerciseStyle?: string | null;
+    mode?: ScreenMode;
+    params?: Record<string, number>;
+    exposure?: { delta: number; vega: number; theta: number };
+    risk?: "defined" | "undefined" | "stock";
   };
   compositeScore: number; // 0-10
   rationale: string;
   // optional: absent on journal snapshots saved before v1.1
   scoreBreakdown?: ScoreBreakdown;
+  // Phase 4+ (score v2); absent on v1 snapshots
+  evaluation?: {
+    market: PositionMetrics;
+    scenario: PositionMetrics | null;
+    ranking: "market" | "scenario";
+    approx?: string | null;
+  };
+  costs?: { spread: number; commission: number; assignment: number; total: number };
+}
+
+// Phase 3 position metrics under one distribution (distribution.position_metrics)
+export interface PositionMetrics {
+  ev: number;
+  evPct: number;
+  pop: number;
+  probMaxProfit: number;
+  maxProfit: number | null;
+  maxLoss: number | null;
+  cvar05: number;
+  var05: number;
+  evPerCvar: number | null;
+  kellyFraction: number;
+  expectedMove: number;
+  entryCost: number;
+  financing: number;
+  dividends?: number;
+  costs: number;
+  distribution: "market" | "scenario" | "lognormal";
 }
 
 export interface ScreenParams {
@@ -147,6 +198,15 @@ export interface ScreenParams {
   asof?: string | null;
 }
 
+export interface VrpInfo {
+  ivAtm: number; sigmaForecast: number; vrp: number; ratio: number; z: number | null;
+  method: string | null; sign: -1 | 0 | 1;
+}
+export interface ForecastInfo {
+  method: string; sigma: number; sigmaLo: number | null; sigmaHi: number | null;
+  horizon: number; asOf: string | null; vrp: { vrp: number | null; z: number | null; n: number } | null;
+}
+
 export interface ScreenResult {
   symbol: string;
   price: number;
@@ -154,6 +214,13 @@ export interface ScreenResult {
   ivBand: "high" | "mid" | "low";
   atmIv: number | null;
   directionalView: DirectionalView;
+  // Phase 4
+  mode?: ScreenMode;
+  vrp?: VrpInfo | null;
+  forecast?: ForecastInfo | null;
+  provider?: string | null;
+  asof?: string | null;
+  scoreVersion?: number;
   strategiesScreened: StrategyType[];
   expirationsScreened: string[];
   generated: number;
@@ -170,6 +237,12 @@ export interface CalcResult {
   probability: Probability;
   metrics: Metrics;
   sizing: Sizing;
+  // Phase 3: EV/POP/CVaR under the market (or lognormal) density, plus a
+  // scenario block when the request set a mode. {error} when the engine refused.
+  evaluation?: {
+    market?: PositionMetrics; scenario?: PositionMetrics; forward?: number;
+    scenarioParams?: Record<string, unknown>; error?: string;
+  };
   inputs: {
     spot: number;
     dte: number;

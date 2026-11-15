@@ -83,3 +83,16 @@ plus factual trade-off comparisons. No number is AI-generated.
 **Data freshness.** Free delayed quotes, 60s cache; staleness measured
 from the chain's last trade. Closed markets → "indicative" closing marks:
 verify live spreads before trading.
+
+## v2 additions (Phase 6)
+
+Mirrors `frontend/src/lib/glossary.ts`.
+
+- **Composite score (v2)** — 10 × (0.40 EV/tail risk + 0.15 POP + 0.15 theta per capital + 0.15 liquidity + 0.15 model confidence); size-invariant; measured under the distribution chosen with *Rank by*.
+- **Expected value (EV)** — probability-weighted P&L after financing and costs. Zero before costs under the market's own odds for every fairly priced trade; positive only under a view the market does not price.
+- **Tail risk (CVaR 5%)** — average loss across the worst 5% of outcomes. The score ranks EV per dollar of CVaR.
+- **Volatility risk premium (VRP)** — implied vol minus the realized-vol forecast (HAR-RV default; EWMA, GARCH). Positive = options rich. z-scored against the symbol's archived history after ~20 days.
+- **Kelly fraction** — growth-optimal capital fraction (mean/variance of return on capital); quarter-Kelly is one of three sizing caps with the 2σ stress budget and buying power.
+- **Volatility smile (SVI)** — one fitted curve per expiry from our own solved IVs, butterfly-arbitrage checked; greeks, probabilities and the implied distribution all read from it; wings held nearly flat beyond quoted strikes.
+- **Early exercise** — American pricing (CRR tree in the Analyzer, Barone-Adesi-Whaley in the screener); index options European.
+- **Calibration** — predicted-POP buckets vs realized win rate (Brier), EV slope; on the Research tab.

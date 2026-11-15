@@ -16,7 +16,7 @@ import type {
   EtfFilters, EtfReference, EtfScreenResult, EtfStrategy, IcsResult,
   IcsViewState, JournalSaveOptions,
   JournalTrade, Leg, MarketPulse, NewTradeInput, PaperSettings, PaperState,
-  Recommendation, ScreenParams, ScreenResult,
+  Recommendation, ScreenMode, ScreenParams, ScreenResult,
 } from "./types";
 // v1.10.1: localStorage persistence lives in lib/storePersist (pure helpers).
 import {
@@ -24,6 +24,7 @@ import {
   readCurrencyPrefs, writeCurrencyPrefs, readSidebarOrder, writeSidebarOrder,
   readStoredFx, writeStoredFx, readStoredWeights, readStoredProfiles,
   type FxPrefs, type SidebarSection, type WeightProfile,
+  readScreenMode, writeScreenMode,
 } from "./lib/storePersist";
 
 // re-export the public persistence names so existing imports keep resolving
@@ -56,6 +57,9 @@ interface AppState {
   capital: number;
   riskTolerancePct: number;
   definedRiskOnly: boolean;
+  // Phase 6: which distribution ranks the screen (persisted)
+  screenMode: ScreenMode;
+  conviction: number;
 
   screenResult: ScreenResult | null;
   selected: Candidate | null;
@@ -134,6 +138,7 @@ interface AppState {
   showToast: (message: string) => void;
   setIntent: (patch: Partial<Pick<AppState,
     "symbol" | "directionalView" | "capital" | "riskTolerancePct" | "definedRiskOnly">>) => void;
+  setScreenMode: (patch: Partial<Pick<AppState, "screenMode" | "conviction">>) => void;
   patchFilters: (patch: Partial<CandidateFilters>) => void;
   clearFilters: () => void;
   setSort: (sort: SortSpec) => void;
@@ -219,6 +224,8 @@ export const useStore = create<AppState>((set, get) => ({
   capital: 25_000,
   riskTolerancePct: 2,
   definedRiskOnly: false,
+  screenMode: readScreenMode().mode,
+  conviction: readScreenMode().conviction,
 
   screenResult: null,
   selected: null,
@@ -283,6 +290,11 @@ export const useStore = create<AppState>((set, get) => ({
   },
 
   setIntent: (patch) => set(patch),
+  setScreenMode: (patch) => {
+    set(patch);
+    const { screenMode, conviction } = get();
+    writeScreenMode({ mode: screenMode, conviction });
+  },
   patchFilters: (patch) => set((s) => ({ filters: { ...s.filters, ...patch } })),
   clearFilters: () => set({ filters: EMPTY_FILTERS }),
   setSort: (sort) => set({ sort }),
@@ -318,13 +330,15 @@ export const useStore = create<AppState>((set, get) => ({
   },
 
   async screen(refresh = false) {
-    const { symbol, directionalView, capital, riskTolerancePct, definedRiskOnly } = get();
+    const { symbol, directionalView, capital, riskTolerancePct, definedRiskOnly, screenMode, conviction } = get();
     const params: ScreenParams = {
       symbol: symbol.trim().toUpperCase(),
       directionalView,
       capital,
       riskTolerancePct,
       definedRiskOnly,
+      mode: screenMode,
+      conviction,
       refresh,
       // request the full generated set; filtering/sorting happens client-side
       topN: 100,
