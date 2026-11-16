@@ -80,7 +80,7 @@ Either way, CI needs the credentials as repository secrets; never commit them.
 packaged build and installs on quit. `npm run dist` must therefore be run
 with `GH_TOKEN` set (or `electron-builder --publish always`) so the
 `latest.yml` manifest is uploaded beside the installer; without it clients
-see no update. The repository in `build.publish` is `kmptrades/option-obelisk`
+see no update. The repository in `build.publish` is `flankyr/option-obelisk`
 (after the rename); GitHub redirects the old name for clones but the updater
 needs the current one.
 

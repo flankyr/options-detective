@@ -6,7 +6,7 @@
 // GitHub token in a distributed binary, which is unsafe by construction.
 import type { JournalTrade } from "../types";
 
-export const FEEDBACK_REPO = "kmptrades/options-detective";
+export const FEEDBACK_REPO = "flankyr/options-detective";
 
 export type FeedbackType = "bug" | "feature" | "feedback";
 
