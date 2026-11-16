@@ -1,3 +1,5 @@
+// DEPRECATED (Phase 4): the table-driven mapping is replaced by exposure
+// signatures in math/structures.py (SPEC + eligible()). Kept for v1 tests.
 // Strategy eligibility: {directionalView, ivRank, constraints} -> strategies.
 // Table from docs/strategy-mapping.md, restricted to the seven v1 strategies.
 // Pure module — no I/O.

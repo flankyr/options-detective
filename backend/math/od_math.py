@@ -1,4 +1,4 @@
-"""Packaged entry point for the math side of Options Detective.
+"""Packaged entry point for the math side of Option Obelisk.
 
 PyInstaller bundles this (onedir) as od-math.exe so end users need no
 Python installation:
@@ -9,6 +9,9 @@ Python installation:
     od-math.exe etf_metrics         ETF screener metrics: JSON on stdin
     od-math.exe etf_holdings        ETF top-holdings fetch: JSON on stdin
     od-math.exe market_pulse        sidebar quotes + news: JSON on stdin
+    od-math.exe archive             daily chain snapshots: JSON on stdin
+    od-math.exe datasvc             data platform (chain/status/config/rates): JSON on stdin
+    od-math.exe simsvc              simulator (strategies/run/walkforward): JSON on stdin
 
 One executable for all entry points keeps a single copy of numpy/scipy in
 the bundle. Exit codes mirror the dev-mode scripts: 0 whenever a JSON
@@ -36,8 +39,17 @@ def main() -> int:
     if command == "market_pulse":
         import market_pulse
         return market_pulse.main()
+    if command == "archive":
+        import archive
+        return archive.main()
+    if command in ("data", "datasvc"):
+        import datasvc
+        return datasvc.main()
+    if command in ("sim", "simsvc"):
+        import simsvc
+        return simsvc.main()
     json.dump({"ok": False,
-               "error": "usage: od-math [engine [--serve] | market_data | etf_metrics | etf_holdings | market_pulse]"},
+               "error": "usage: od-math [engine [--serve] | market_data | etf_metrics | etf_holdings | market_pulse | archive | data | sim]"},
               sys.stdout)
     sys.stdout.write("\n")
     return 2

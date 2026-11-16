@@ -128,3 +128,42 @@ test("invalid symbols are rejected before any fetch", async () => {
     await assert.rejects(() => layer.getMarketData(bad), DataError);
   }
 });
+
+// ---- Phase 1: point-in-time reads and liquidity-unknown sources ----------
+const { createDataLayer: createDL, applyLiquidityGates: gates1 } = require("../services/dataLayer");
+
+test("Phase 1: null volume/OI is 'unknown' — kept and flagged, never gated as zero", () => {
+  const { chains, stats } = gates1({
+    "2026-12-18": {
+      calls: [{ strike: 100, bid: 1, ask: 1.1, mid: 1.05, volume: null, openInterest: null }],
+      puts: [{ strike: 100, bid: 1, ask: 1.1, mid: 1.05, volume: 0, openInterest: 0 }],
+    },
+  });
+  assert.equal(chains["2026-12-18"].calls.length, 1);
+  assert.equal(chains["2026-12-18"].calls[0].liquidityUnknown, true);
+  assert.equal(chains["2026-12-18"].puts.length, 0); // real zeros still fail the gate
+  assert.equal(stats.dropped.volume, 1);
+});
+
+test("Phase 1: asof reads are cached indefinitely, validated, and not marked stale", async () => {
+  let calls = 0;
+  const fetcher = async (sym, opts) => {
+    calls += 1;
+    return {
+      symbol: sym, price: 100, atmIv: 0.2, ivRank: null, expirations: ["2026-12-18"],
+      chains: { "2026-12-18": { calls: [], puts: [] } },
+      fetchedAt: "2026-01-02T00:00:00Z", lastTradeAt: "2026-01-02T21:00:00Z",
+      asof: opts.asof, provider: "archive",
+      capabilities: { live: false, historical: true },
+    };
+  };
+  const dl = createDL({ fetcher, now: () => Date.parse("2026-11-14T00:00:00Z") });
+  const a = await dl.getMarketData("SPY", { asof: "2026-01-02" });
+  assert.equal(a.pointInTime, true);
+  assert.equal(a.stale, false);
+  await dl.getMarketData("SPY", { asof: "2026-01-02" });
+  assert.equal(calls, 1);
+  await dl.getMarketData("SPY", { asof: "2026-01-03" });
+  assert.equal(calls, 2);
+  await assert.rejects(dl.getMarketData("SPY", { asof: "yesterday" }), /invalid asof/);
+});

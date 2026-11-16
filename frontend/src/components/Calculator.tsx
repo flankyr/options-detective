@@ -172,6 +172,20 @@ export default function Calculator() {
                 hint="Probability of any profit at expiry (lognormal model, risk-neutral drift)"
                 onInfo={() => s.openHelp("pop")} />
             </div>
+            {result.evaluation?.market && (
+              <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4 text-sm" data-testid="calc-evaluation">
+                <Stat label="EV (after costs)" value={signed(result.evaluation.market.ev)}
+                  tone={result.evaluation.market.ev >= 0 ? "good" : "bad"}
+                  hint={`Expected value per lot under ${result.evaluation.market.distribution === "market" ? "the market-implied distribution" : "the lognormal at this sigma"}: about zero before costs for a fairly priced trade, by construction`}
+                  onInfo={() => s.openHelp("expected-value")} />
+                <Stat label="Tail risk (CVaR 5%)" value={money(result.evaluation.market.cvar05)} tone="bad"
+                  hint="Average loss in the worst 5% of outcomes at expiry" onInfo={() => s.openHelp("cvar")} />
+                <Stat label="P(max profit)" value={pct(result.evaluation.market.probMaxProfit)}
+                  hint="Probability of finishing at the maximum profit" />
+                <Stat label="Expected move" value={`±${money(result.evaluation.market.expectedMove)}`}
+                  hint="One standard deviation of the underlying at expiry under this distribution" />
+              </div>
+            )}
           </div>
 
           <div className="space-y-4 lg:col-span-2">

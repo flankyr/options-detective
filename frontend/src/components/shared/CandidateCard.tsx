@@ -2,6 +2,8 @@ import { money, pct, shortDate, signed, strategyLabel } from "../../lib/format";
 import Button from "../ui/Button";
 import { Badge, Card, CardContent, CardFooter, CardHeader, MetricBox } from "../ui/Card";
 import ScoreBreakdown from "./ScoreBreakdown";
+import ScoreBreakdownV2, { isV2 } from "./ScoreBreakdownV2";
+import WhyThisNumber from "./WhyThisNumber";
 import { useMode } from "../../contexts/ModeContext";
 import { useStore } from "../../store";
 import { BEST_FOR } from "../../lib/copy";
@@ -42,8 +44,16 @@ export default function CandidateCard({
           </div>
         </div>
         <div className="flex items-center gap-2">
+          {c.evaluation && (
+            <Badge variant={(c.evaluation.scenario ?? c.evaluation.market).ev > 0 ? "green" : "neutral"}
+              title={c.evaluation.scenario
+                ? "Expected value per lot after costs under your scenario (market odds give about zero)"
+                : "Expected value per lot after costs under market odds: about minus the costs, by construction"}>
+              EV {signed((c.evaluation.scenario ?? c.evaluation.market).ev)}
+            </Badge>
+          )}
           <Badge variant={c.probability.pop >= 0.6 ? "green" : "blue"}
-            title="Probability of any profit at expiry (lognormal model)">
+            title={c.evaluation ? `Probability of profit under the ranking distribution (market odds: ${pct(c.evaluation.market.pop)})` : "Probability of any profit at expiry (lognormal model)"}>
             {pct(c.probability.pop)} POP
           </Badge>
           {expertMode && (
@@ -78,8 +88,9 @@ export default function CandidateCard({
       {expertMode
         ? (
           <div className="mb-3 space-y-2">
-            <ScoreBreakdown candidate={c} weights={weights} />
+            {isV2(c) ? <ScoreBreakdownV2 candidate={c} /> : <ScoreBreakdown candidate={c} weights={weights} />}
             <p className="text-xs text-content-3">{c.rationale}</p>
+            <WhyThisNumber candidate={c} />
           </div>
         )
         : <p className="mb-3 text-xs text-accent-primary-text">Best for: {BEST_FOR[c.strategyType]}</p>}

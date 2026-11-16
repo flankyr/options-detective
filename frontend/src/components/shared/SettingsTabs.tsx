@@ -401,6 +401,11 @@ export function ScoringTab() {
   return (
     <Section index={0}>
       <div className="rounded-md bg-dark-700/50 p-4" data-testid="scoring-settings">
+        <div className="mb-3 rounded-md border border-accent-blue/30 bg-accent-blue/10 px-3 py-2 text-xs text-content-2">
+          Screens now rank with <b>score v2</b> (EV per tail risk 40, POP 15, theta per capital 15, liquidity 15,
+          model confidence 15), fixed and size-invariant; the ranking distribution is chosen with <b>Rank by</b> on the
+          Screener. The sliders below still re-weight positions saved before v2 and v1-style snapshots.
+        </div>
         <details className="mb-3">
           <summary className="cursor-pointer text-sm text-content-2">
             How scoring works

@@ -153,9 +153,47 @@ export const GLOSSARY: GlossarySection[] = [
     entries: [
       {
         id: "composite-score",
-        term: "Composite score",
-        body: "score = 10 × (w·POP + w·risk/reward + w·theta + w·capital efficiency + w·liquidity), each component normalized 0–1 by the backend. Default weights are POP 30 / RoR 20 / Theta 20 / CapEff 15 / Liquidity 15, and they are yours to change in Settings → Scoring weights, with presets and saved profiles. Every card's breakdown bar shows exactly where its points came from.",
-        useCase: "If the #1 result doesn't match your priorities, change the weights, the ranking is transparent, not an oracle.",
+        term: "Composite score (v2)",
+        body: "score = 10 × (0.40·EV/tail risk + 0.15·POP + 0.15·theta per capital + 0.15·liquidity + 0.15·model confidence). Every component is 0–1 and independent of position size, so a one-lot and a ten-lot of the same trade score the same. EV and POP are measured under the distribution you chose with Rank by (market odds in Analyzer mode, the vol forecast and/or your view otherwise). Every card's breakdown bar shows where the points came from; Why these numbers shows the inputs.",
+        useCase: "A high score in Analyzer mode means liquid, well-understood and collecting decay, not profitable: market odds give every fair trade EV of about minus its costs.",
+      },
+      {
+        id: "expected-value",
+        term: "Expected value (EV)",
+        body: "The average profit of a trade over all outcomes, weighted by their probability, after financing the premium and paying half-spreads, commissions and expected assignment fees. Under the market's own odds (the distribution implied by option prices) every fairly priced trade has EV of zero before costs; that is a mathematical identity, not a coincidence. Positive EV therefore requires a view the market does not already price: a volatility forecast or a directional opinion.",
+        useCase: "If EV is positive only in your scenario and about −costs under market odds, you are being paid for your forecast, nothing else. Check the Research tab to see whether that forecast has earned its keep.",
+      },
+      {
+        id: "cvar",
+        term: "Tail risk (CVaR)",
+        body: "Conditional value at risk at 5%: the average loss across the worst 5% of outcomes at expiry. Unlike max loss it is reachable, and unlike VaR it looks past the threshold at how bad the tail actually is. The score ranks on EV per dollar of CVaR, so a trade that earns $30 against a $300 tail beats one earning $50 against a $1,500 tail.",
+      },
+      {
+        id: "vrp",
+        term: "Volatility risk premium (VRP)",
+        body: "The gap between the volatility options imply and the volatility the underlying is forecast to realize. Positive means options are rich: sellers are paid to carry variance risk, so short-vega structures (condors, strangles, credit spreads) have positive EV if the forecast holds. Negative means options are cheap. The forecast is HAR-RV by default (a regression of forward variance on daily, weekly and monthly realized variance), with EWMA and GARCH available. The z-score compares today's VRP with this symbol's own archived history and becomes available after about 20 days of snapshots.",
+        useCase: "A rich VRP is a reason to sell premium, not a guarantee: the forecast carries a band and the Research tab's calibration shows how often it has been right.",
+      },
+      {
+        id: "kelly",
+        term: "Kelly fraction",
+        body: "The fraction of capital that maximises long-run growth given the trade's return distribution (mean divided by variance of return on capital). Full Kelly is far too aggressive for an uncertain model, so sizing uses a quarter of it as one of three caps alongside the risk budget (2σ stress loss) and buying power. Which cap bit is named on every card.",
+      },
+      {
+        id: "smile",
+        term: "Volatility smile (SVI)",
+        body: "Implied volatility differs by strike: on equities, out-of-the-money puts trade at higher vol than calls (skew). The app solves its own implied vol for every contract from the mid price and fits one smooth curve per expiry (Gatheral's SVI, with a butterfly-arbitrage check, falling back to a spline on thin chains). Greeks, probabilities and the market-implied distribution all read vol off that smile, so a card's numbers agree with each other. Wings beyond the quoted strikes are held nearly flat: no information, no extrapolated fantasy.",
+      },
+      {
+        id: "early-exercise",
+        term: "Early exercise (American options)",
+        body: "US stock and ETF options can be exercised any day; index options (SPX, XSP, NDX, RUT, VIX) only at expiry. Early exercise is worth something for deep in-the-money puts (collect the strike early) and for calls just before a dividend. The engine prices American options with a binomial tree in the Analyzer and a fast Barone-Adesi-Whaley approximation in the screener, and reports the early-exercise premium and the price below which a put would be exercised.",
+      },
+      {
+        id: "calibration",
+        term: "Calibration",
+        body: "Whether the model's probabilities mean what they say. The Research tab groups past trades by predicted POP and compares with how often they actually won; a Brier score of 0 is perfect and 0.25 is a coin flip. For EV it regresses realized P&L on predicted EV: a slope near 1 means the EV scale is believable, near 0 means the edge did not show up.",
+        useCase: "Treat the screener's score as a hypothesis until this page agrees with it.",
       },
       {
         id: "recommendations",
@@ -163,9 +201,14 @@ export const GLOSSARY: GlossarySection[] = [
         body: "Recommendations are the same deterministic ranking, not a separate opinion: top candidates by composite score (under your weights), plus factual trade-off comparisons, win rate, capital tied up, defined vs undefined risk, complexity, theta direction. No number in a recommendation is generated by an AI.",
       },
       {
+        id: "disclaimer",
+        term: "Disclaimer",
+        body: "Option Obelisk is an educational analytics tool, not a broker and not investment, legal or tax advice. Options involve substantial risk, including losses greater than the initial investment on undefined-risk positions. Every price, probability, expected value and recommendation is a model output built on delayed third-party data that may be incomplete or wrong; a positive expected value holds only if the volatility forecast or your stated view proves right. Simulated results do not predict future results. You are solely responsible for your trading decisions; verify live quotes with your broker. Data: Massive (formerly Polygon.io) and Yahoo Finance via yfinance (live, 15-minute delay), your own archive and the DoltHub post-no-preference/options dataset (history), US Treasury par yields (rates). Not affiliated with any provider.",
+      },
+      {
         id: "data-freshness",
         term: "Data freshness",
-        body: "Quotes come from free delayed data (yfinance) with a 60-second cache. Staleness is measured from the chain's last actual trade, not fetch time, a weekend fetch of Friday's close is labelled stale. When the market is closed, books are empty or wide, so candidates are priced off closing marks and tagged “indicative”: verify live spreads before trading.",
+        body: "Live chains come from the first configured source (Massive, then yfinance), 15 minutes delayed, with a 60-second cache; every screen names its source and date. Staleness is measured from the chain's last actual trade, not fetch time: a weekend fetch of Friday's close is labelled stale. When the market is closed, books are empty or wide, so candidates are priced off closing marks and tagged “indicative”: verify live spreads before trading. Historical chains (backtests) come from your own daily archive, then DoltHub.",
       },
     ],
   },

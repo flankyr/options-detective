@@ -3,9 +3,8 @@
 // cached 60s. The breadth basket is the curated S&P 500 top-holdings set
 // (etfHoldings SP500) — a documented proxy, not full-index breadth: it
 // covers ~45% of index weight and is one HTTP round-trip on free data.
-const { spawn } = require("child_process");
 
-const { mathCommand } = require("./python");
+const { runPython } = require("./pythonRun");
 const { HOLDING_SETS } = require("./etfHoldings");
 
 const CACHE_TTL_MS = 60_000;
@@ -17,47 +16,7 @@ const MAX_WATCH = 20;
 const BREADTH_BASKET = HOLDING_SETS.SP500.map(([symbol]) => symbol);
 
 function fetchPulseViaPython(symbols, { timeoutMs = PULSE_TIMEOUT_MS } = {}) {
-  return new Promise((resolve, reject) => {
-    const cmd = mathCommand("market_pulse");
-    const proc = spawn(cmd.bin, cmd.args, { cwd: cmd.cwd, windowsHide: true });
-    let stdout = "";
-    let stderr = "";
-    const timer = setTimeout(() => {
-      proc.kill();
-      reject(new Error(`market pulse fetch timed out after ${timeoutMs}ms`));
-    }, timeoutMs);
-    proc.stdout.on("data", (chunk) => { stdout += chunk; });
-    proc.stderr.on("data", (chunk) => { stderr += chunk; });
-    proc.on("error", (err) => {
-      clearTimeout(timer);
-      reject(new Error(`failed to start market pulse adapter: ${err.message}`));
-    });
-    proc.on("close", (code) => {
-      clearTimeout(timer);
-      if (code !== 0) {
-        reject(new Error(`market pulse adapter exited ${code}: ${stderr.slice(0, 400)}`));
-        return;
-      }
-      let parsed;
-      try {
-        parsed = JSON.parse(stdout);
-      } catch {
-        reject(new Error(`market pulse adapter returned invalid JSON: ${stdout.slice(0, 200)}`));
-        return;
-      }
-      if (!parsed.ok) {
-        reject(new Error(parsed.error));
-        return;
-      }
-      resolve(parsed.result);
-    });
-    proc.stdin.write(JSON.stringify({
-      symbols,
-      news_symbol: NEWS_SYMBOL,
-      news_count: 5,
-    }));
-    proc.stdin.end();
-  });
+  return runPython("market_pulse", { symbols, news_symbol: NEWS_SYMBOL, news_count: 5 }, { timeoutMs });
 }
 
 // advancers / (advancers + decliners) over the basket, 0-100. Unchanged

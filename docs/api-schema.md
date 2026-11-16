@@ -5,19 +5,51 @@
 | Endpoint | Purpose |
 |---|---|
 | `GET /health` | Express + Python engine round trip |
-| `GET /data/:symbol?refresh=1&expirations=6` | normalized chains after liquidity gates, IV rank, data/quote age, stale flag |
+| `GET /data/:symbol?refresh=1&expirations=6&asof=YYYY-MM-DD&provider=name` | normalized chain (schema v2) after liquidity gates; `asof` = point-in-time read from the archive/DoltHub |
+| `GET /data/providers` · `PUT /data/providers` | provider order, capabilities, Massive key, rate-curve source |
+| `POST /data/rates/refresh` | re-fetch the US Treasury par curve |
+| `GET /archive/status` · `POST /archive/snapshot` · `PUT /archive/settings` | daily chain archive (Phase 0) |
+| `GET /research/strategies` · `GET /research/runs` · `POST /research/backtest` · `POST /research/walkforward` · `GET /research/forecast-walkforward/:symbol` | simulator (Phase 5), see `docs/algorithms/simulator.md` |
 | `POST /detect` | screen all expirations × eligible strategies → ranked candidates |
 | `POST /calculate` | full analysis of one position (greeks, payoff, POP, sizing) |
 | `POST /calculate/engine` | raw math engine passthrough |
 | `POST /recommend` | top-5 ranking + trade-off facts + broker export text |
 
-### POST /detect
+### Chain payload (schema v2, Phase 1)
+
+Produced by `backend/math/data/` (`od-math datasvc`), consumed by the Node
+data layer. Superset of the v1 shape; new fields in bold.
+
+| Field | Meaning |
+|---|---|
+| `symbol`, `price`, `atmIv`, `ivRank`, `ivRankMethod`, `expirations`, `chains`, `lastTradeAt`, `fetchedAt` | as v1 |
+| **`asof`** | ISO trading date the chain describes; live reads carry today |
+| **`provider`** | `massive` · `yfinance` · `archive` · `dolthub` |
+| **`capabilities`** | `{live, historical, delayed_minutes, has_greeks, has_open_interest, has_volume, history_depth_days, license_note}` |
+| **`underlyingClose`** | underlying close for `asof` (== `price` when live) |
+| **`dividendYield`** | trailing-12m cash dividends / price, or null |
+| **`rates`** | `{expiration: r}` continuously-compounded risk-free rate per expiry from the Treasury curve |
+| **`liquidityKnown`** | false when the source has no volume/OI (DoltHub); contracts then carry `liquidityUnknown: true` after gating instead of being dropped |
+| **`attempts`** | providers tried before the one that answered, with the reason each was skipped |
+
+Per contract: `strike, bid, ask, mid, volume, openInterest, impliedVolatility, spreadPct, timestamp` as v1,
+plus **`ivVendor`** (the source's IV; Phase 2 adds `ivModel`) and optional **`greeks`** when the source publishes them.
+Node adds `illiquid`, `indicativeOnly`, `liquidityUnknown`; the payload gains `dataAgeSeconds`, `quoteAgeSeconds`, `stale`, `pointInTime`.
+
+### POST /detect (v2, Phase 4)
 
 ```json
 { "symbol": "AAPL", "directionalView": "neutral|bullish|bearish|income",
+  "mode": "market|vrp|directional|both", "conviction": 0.5,
   "capital": 25000, "riskTolerancePct": 2, "maxLossDollars": null,
-  "definedRiskOnly": false, "minDTE": 5, "maxDTE": 90, "refresh": false }
+  "maxBuyingPowerPct": 50, "kellyFraction": 0.25, "stressSigmas": 2,
+  "definedRiskOnly": false, "allowedStrategies": [], "minDTE": 5, "maxDTE": 90,
+  "forecastMethod": "har", "costs": {}, "asof": null, "refresh": false }
 ```
+
+Response adds `mode` (the mode actually used), `vrp`, `forecast`,
+`scoreVersion: 2`; candidates add `evaluation`, `costs`, `sizing.binding/limits`,
+`meta.exposure/risk/mode`. See `docs/algorithms/optimizer-v2.md`.
 
 Response: `{symbol, price, ivRank, ivBand, strategiesScreened, generated,
 candidates[], dataAgeSeconds, stale, warnings[]}`. Candidates carry

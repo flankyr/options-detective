@@ -1,5 +1,11 @@
 # Strategy Mapping (Detector Logic — Phase 3)
 
+> **Status (Nov 2026):** describes the v1 Detector. Only seven of the strategies
+> below are implemented (`backend/services/strategyMapping.js`): covered call,
+> cash-secured put, call/put vertical, iron condor, long straddle, short
+> strangle. The table-driven mapping and the POP-weighted score are replaced
+> in Phase 4 of `ROADMAP-v2.md` (exposure signatures, EV/CVaR scoring).
+
 Maps `{directionalView, ivRank, allowedStrategies}` to ranked eligible
 strategies.
 

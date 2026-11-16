@@ -12,10 +12,27 @@ const screenerRouter = require("./routes/screener");
 const marketRouter = require("./routes/market");
 const { router: authRouter, requireAccount } = require("./routes/auth");
 const accountRouter = require("./routes/account");
+const archiveRouter = require("./routes/archive");
+const researchRouter = require("./routes/research");
+const { archiveService } = require("./services/archive");
 const { callEngine, engineClient } = require("./services/mathEngine");
 
 const app = express();
-app.use(cors());
+
+// I1 (roadmap v2): the backend is a private helper for the Electron renderer.
+// It listens on loopback only (see app.listen below) and answers CORS for the
+// renderer's own origins, so neither another machine on the LAN nor a web
+// page open in a browser can drive /detect or /calculate. Electron's packaged
+// renderer loads from file:// and sends no Origin header, which is why a
+// missing origin is accepted; browsers always send one.
+const ALLOWED_ORIGINS = new Set([
+  "http://localhost:5173", "http://127.0.0.1:5173", // vite dev
+  "http://localhost:5174", "http://127.0.0.1:5174", // isolated dev (backend-alt)
+  ...(process.env.OD_CORS_ORIGINS ? process.env.OD_CORS_ORIGINS.split(",") : []),
+]);
+app.use(cors({
+  origin: (origin, cb) => cb(null, !origin || ALLOWED_ORIGINS.has(origin)),
+}));
 // 10mb: account backups (v1.7.2 import) carry every trade incl. candidate
 // snapshots — far beyond the old 1mb API-payload ceiling
 app.use(express.json({ limit: "10mb" }));
@@ -53,6 +70,8 @@ app.use("/etf-screener", requireAccount, etfRouter);
 app.use("/account", requireAccount, accountRouter); // v1.7.2 backup/restore
 app.use("/screener", screenerRouter);
 app.use("/market", marketRouter);
+app.use("/archive", archiveRouter); // Phase 0: daily chain snapshots
+app.use("/research", researchRouter); // Phase 5: simulator
 
 // JSON everywhere: unknown routes and unhandled errors never leak HTML.
 app.use((req, res) => {
@@ -66,11 +85,14 @@ app.use((err, _req, res, _next) => {
 });
 
 const PORT = process.env.PORT || 3001;
+const HOST = process.env.OD_HOST || "127.0.0.1"; // loopback only; never 0.0.0.0 by default
 if (require.main === module) {
-  const server = app.listen(PORT, () => {
-    console.log(`options-detective backend listening on http://localhost:${PORT}`);
+  const server = app.listen(PORT, HOST, () => {
+    console.log(`option-obelisk backend listening on http://${HOST}:${PORT}`);
   });
+  archiveService.start(); // snapshots the watchlist after the close when missing
   const shutdown = () => {
+    archiveService.stop();
     engineClient.shutdown(); // stop the warm Python child
     server.close(() => process.exit(0));
     setTimeout(() => process.exit(0), 2_000).unref();
@@ -80,3 +102,4 @@ if (require.main === module) {
 }
 
 module.exports = app;
+module.exports.ALLOWED_ORIGINS = ALLOWED_ORIGINS;

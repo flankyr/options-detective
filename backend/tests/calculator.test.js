@@ -4,6 +4,7 @@ const assert = require("node:assert/strict");
 
 const { createCalculator, CalcInputError } = require("../services/calculator");
 const { engineClient } = require("../services/mathEngine");
+const { engineTest } = require("./engineAvailable");
 
 test.after(() => engineClient.shutdown());
 
@@ -20,7 +21,7 @@ const BULL_CALL = {
   riskTolerancePct: 2,
 };
 
-test("bull call spread: exact payoff, probabilities, sizing", async () => {
+test("bull call spread: exact payoff, probabilities, sizing", engineTest, async () => {
   const out = await calc.analyze(BULL_CALL);
 
   // exact payoff math (width 5, debit 2)
@@ -43,12 +44,12 @@ test("bull call spread: exact payoff, probabilities, sizing", async () => {
   assert.equal(out.sizing.capitalRequired, 200);
 });
 
-test("sigma falls back to average leg IV and is echoed in inputs", async () => {
+test("sigma falls back to average leg IV and is echoed in inputs", engineTest, async () => {
   const out = await calc.analyze(BULL_CALL);
   assert.ok(Math.abs(out.inputs.sigma - 0.245) < 1e-9);
 });
 
-test("covered call uses buy-write capital when strategyType is passed", async () => {
+test("covered call uses buy-write capital when strategyType is passed", engineTest, async () => {
   const out = await calc.analyze({
     legs: [
       { type: "long_stock", price: 100, qty: 100 },
@@ -64,7 +65,7 @@ test("covered call uses buy-write capital when strategyType is passed", async ()
   assert.deepEqual(out.payoff.breakevens, [98]);
 });
 
-test("undefined-risk position gets a flagged margin proxy", async () => {
+test("undefined-risk position gets a flagged margin proxy", engineTest, async () => {
   const out = await calc.analyze({
     legs: [
       { type: "short_put", strike: 95, price: 2, qty: 1, iv: 0.3 },
@@ -98,7 +99,7 @@ test("input validation rejects malformed requests", async () => {
   }
 });
 
-test("repriceTheoretical replaces marks with BS values and labels them", async () => {
+test("repriceTheoretical replaces marks with BS values and labels them", engineTest, async () => {
   const out = await calc.analyze({
     legs: [{ type: "long_call", strike: 100, price: 999, qty: 1, iv: 0.2 }],
     spot: 100,
@@ -113,7 +114,7 @@ test("repriceTheoretical replaces marks with BS values and labels them", async (
   assert.equal(out.sizing.totalDebit, 1045);
 });
 
-test("adjustment flow: widening the spread raises max profit and max loss", async () => {
+test("adjustment flow: widening the spread raises max profit and max loss", engineTest, async () => {
   const narrow = await calc.analyze(BULL_CALL);
   const wide = await calc.analyze({
     ...BULL_CALL,
@@ -124,4 +125,27 @@ test("adjustment flow: widening the spread raises max profit and max loss", asyn
   });
   assert.ok(wide.payoff.maxProfit > narrow.payoff.maxProfit);
   assert.ok(wide.payoff.maxLoss > narrow.payoff.maxLoss);
+});
+
+// ---- Phase 3: distribution evaluation rides along with every analysis ---------
+test("Phase 3: analyze() returns market EV ~0 for fairly priced legs and a scenario block when asked", engineTest, async () => {
+  const calc = createCalculator();
+  const spot = 100, dte = 45, T = dte / 365, sigma = 0.25;
+  const { callEngine } = require("../services/mathEngine");
+  const p480 = await callEngine("bsm_price", { S: spot, K: 95, T, r: 0, sigma, q: 0, option_type: "put" });
+  const p470 = await callEngine("bsm_price", { S: spot, K: 90, T, r: 0, sigma, q: 0, option_type: "put" });
+  const legs = [
+    { type: "short_put", strike: 95, price: p480, qty: 1, iv: sigma },
+    { type: "long_put", strike: 90, price: p470, qty: 1, iv: sigma },
+  ];
+  const base = await calc.analyze({ legs, spot, dte, sigma, riskFreeRate: 0 });
+  assert.ok(base.evaluation && base.evaluation.market);
+  assert.ok(Math.abs(base.evaluation.market.ev) < 1.0, `ev ${base.evaluation.market.ev}`);
+  assert.equal(base.evaluation.market.distribution, "lognormal");
+  assert.ok(Math.abs(base.evaluation.market.pop - base.probability.pop) < 0.01);
+  assert.equal(base.evaluation.scenario, undefined);
+  const vrp = await calc.analyze({ legs, spot, dte, sigma, riskFreeRate: 0, mode: "vrp", sigmaForecast: 0.18, costs: 4 });
+  assert.ok(vrp.evaluation.scenario.ev > vrp.evaluation.market.ev);
+  assert.equal(vrp.evaluation.scenarioParams.sigmaForecast, 0.18);
+  assert.equal(vrp.evaluation.market.costs, 4);
 });

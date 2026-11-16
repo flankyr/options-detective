@@ -1,3 +1,5 @@
+// DEPRECATED (Phase 4): strike selection moved to math/structures.py. Kept
+// only for the v1 unit tests until they are retired; nothing imports this.
 // Pure candidate-draft generation: strike selection per strategy from a
 // liquidity-gated chain. No I/O and no pricing math here — the Detector
 // prices drafts through the math engine afterward.
@@ -49,7 +51,12 @@ function optionLeg(type, contract) {
     strike: contract.strike,
     price: contract.mid,
     qty: 1,
-    iv: contract.impliedVolatility,
+    // Phase 2: the fitted-smile vol at this strike is the vol the engine uses
+    // (consistent across greeks and probabilities); our own solved IV next,
+    // the vendor's number last. ivSource says which one won.
+    iv: contract.ivSmile ?? contract.ivModel ?? contract.impliedVolatility,
+    ivSource: contract.ivSmile != null ? "smile" : (contract.ivModel != null ? "model" : "vendor"),
+    ivVendor: contract.impliedVolatility,
     spreadPct: contract.spreadPct,
     volume: contract.volume,
     openInterest: contract.openInterest,

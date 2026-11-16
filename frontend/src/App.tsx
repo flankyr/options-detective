@@ -12,6 +12,7 @@ import Recommender from "./components/Recommender";
 const Analytics = lazy(() => import("./components/Analytics"));
 const Calculator = lazy(() => import("./components/Calculator"));
 const PaperTrading = lazy(() => import("./components/PaperTrading"));
+const Research = lazy(() => import("./components/Research"));
 import FeedbackModal from "./components/shared/FeedbackModal";
 import HelpDrawer from "./components/shared/HelpDrawer";
 import Onboarding, { hasCompletedOnboarding } from "./components/shared/Onboarding";
@@ -23,6 +24,7 @@ import SplashScreen from "./components/shared/SplashScreen";
 import { RightSidebar } from "./components/shared/Sidebars";
 import AuthGate from "./components/AuthGate";
 import ViewTransition from "./components/shared/ViewTransition";
+import { DisclaimerFooter } from "./components/shared/Disclaimer";
 import { useMode } from "./contexts/ModeContext";
 import { useAlerts } from "./lib/useAlerts";
 import { useStore, type View } from "./store";
@@ -40,6 +42,7 @@ const TABS: Array<{ id: View; label: string; hint: string }> = [
   { id: "analytics", label: "Analytics", hint: "Realized performance, equity curve, win rate, per-strategy stats" },
   { id: "paper", label: "Sandbox", hint: "Risk-free simulator with a practice budget" },
   { id: "etf", label: "Assets", hint: "Asset Screener, discover ETF option-selling candidates" },
+  { id: "research", label: "Research", hint: "Backtest strategies on archived chains, calibration, walk-forward" },
 ];
 
 // Suspense fallback for a lazy view chunk — mirrors the boot splash's
@@ -124,6 +127,7 @@ function MainApp() {
     recommender: (screenResult?.candidates.length ?? 0) > 0,
     journal: true,
     analytics: true,
+    research: true,
     paper: true,
     etf: true,
     ics: true, // reached from the Asset Screener, not the nav
@@ -280,12 +284,14 @@ function MainApp() {
                 {view === "paper" && <PaperTrading />}
                 {view === "etf" && <EtfScreener />}
                 {view === "ics" && <IndexComponentScreener />}
+                {view === "research" && <Research />}
               </Suspense>
             </ViewTransition>
           </div>
         </main>
         <RightSidebar />
       </div>
+      <DisclaimerFooter />
 
       {/* v1.5.1 help affordance, bottom-left of Home. Rendered at the app
           root (not inside the view) so `fixed` anchors to the viewport, a

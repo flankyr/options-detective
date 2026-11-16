@@ -165,3 +165,22 @@ export function readLastScreen(): { symbol: string; at: number } | null {
     return null;
   }
 }
+
+// ---- Phase 6: screen mode (ranking distribution) ---------------------------
+export const SCREEN_MODE_KEY = "od.screenMode";
+export interface ScreenModePrefs { mode: "market" | "vrp" | "directional" | "both"; conviction: number }
+export function readScreenMode(): ScreenModePrefs {
+  try {
+    const raw = localStorage.getItem(SCREEN_MODE_KEY);
+    if (raw) {
+      const p = JSON.parse(raw);
+      if (["market", "vrp", "directional", "both"].includes(p.mode)) {
+        return { mode: p.mode, conviction: Number.isFinite(p.conviction) ? p.conviction : 0.5 };
+      }
+    }
+  } catch { /* defaults */ }
+  return { mode: "both", conviction: 0.5 };
+}
+export function writeScreenMode(prefs: ScreenModePrefs) {
+  try { localStorage.setItem(SCREEN_MODE_KEY, JSON.stringify(prefs)); } catch { /* session-only */ }
+}

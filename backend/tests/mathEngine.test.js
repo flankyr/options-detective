@@ -4,15 +4,16 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 
 const { callEngine, callEngineBatch, EngineDomainError, engineClient } = require("../services/mathEngine");
+const { engineTest } = require("./engineAvailable");
 
 test.after(() => engineClient.shutdown());
 
-test("prices a call through the warm engine", async () => {
+test("prices a call through the warm engine", engineTest, async () => {
   const price = await callEngine("bs_call_price", { S: 100, K: 100, T: 1, r: 0.05, sigma: 0.2 });
   assert.ok(Math.abs(price - 10.4506) < 1e-3, `got ${price}`);
 });
 
-test("pipelines concurrent calls over one process", async () => {
+test("pipelines concurrent calls over one process", engineTest, async () => {
   const [call, put, pop] = await Promise.all([
     callEngine("bs_call_price", { S: 100, K: 100, T: 1, r: 0.05, sigma: 0.2 }),
     callEngine("bs_put_price", { S: 100, K: 100, T: 1, r: 0.05, sigma: 0.2 }),
@@ -23,7 +24,7 @@ test("pipelines concurrent calls over one process", async () => {
   assert.ok(pop > 0 && pop < 1);
 });
 
-test("batch returns per-item envelopes", async () => {
+test("batch returns per-item envelopes", engineTest, async () => {
   const results = await callEngineBatch([
     { fn: "bs_call_greeks", args: { S: 100, K: 100, T: 1, r: 0.05, sigma: 0.2 } },
     { fn: "bs_call_price", args: { S: -1, K: 100, T: 1, r: 0.05, sigma: 0.2 } },
@@ -34,14 +35,14 @@ test("batch returns per-item envelopes", async () => {
   assert.equal(results[1].ok, false);
 });
 
-test("domain errors reject with EngineDomainError", async () => {
+test("domain errors reject with EngineDomainError", engineTest, async () => {
   await assert.rejects(
     () => callEngine("bs_call_price", { S: -5, K: 100, T: 1, r: 0.05, sigma: 0.2 }),
     EngineDomainError,
   );
 });
 
-test("engine stays warm: 200 batch items complete fast", async () => {
+test("engine stays warm: 200 batch items complete fast", engineTest, async () => {
   await callEngine("bs_call_price", { S: 100, K: 100, T: 1, r: 0.05, sigma: 0.2 }); // warm-up
   const requests = Array.from({ length: 200 }, (_, i) => ({
     fn: "bs_call_greeks",

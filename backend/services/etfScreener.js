@@ -1,9 +1,8 @@
 // ETF screener orchestration (v2.0 §2). Merges the static universe with
 // cached dynamic metrics, spawns the Python metric fetcher on refresh, and
 // runs the pure screen()/scoring. Freshness is surfaced, never hidden.
-const { spawn } = require("child_process");
 
-const { mathCommand } = require("./python");
+const { runPython } = require("./pythonRun");
 const { ETF_UNIVERSE, BY_TICKER, TICKERS, SECTORS, ASSET_CLASSES } = require("./etfUniverse");
 const { PRESETS, screen: screenPure, scoreFor } = require("./etfScreening");
 const { etfStore: defaultStore } = require("./etfStore");
@@ -57,40 +56,7 @@ function attachThetaRank(list) {
 }
 
 function fetchMetricsViaPython(tickers, { timeoutMs = REFRESH_TIMEOUT_MS } = {}) {
-  return new Promise((resolve, reject) => {
-    const cmd = mathCommand("etf_metrics");
-    const proc = spawn(cmd.bin, cmd.args, { cwd: cmd.cwd, windowsHide: true });
-    let stdout = "";
-    let stderr = "";
-    const timer = setTimeout(() => {
-      proc.kill();
-      reject(new Error(`ETF metrics fetch timed out after ${timeoutMs}ms`));
-    }, timeoutMs);
-    proc.stdout.on("data", (c) => { stdout += c; });
-    proc.stderr.on("data", (c) => { stderr += c; });
-    proc.on("error", (err) => {
-      clearTimeout(timer);
-      reject(new Error(`failed to start ETF metrics fetcher: ${err.message}`));
-    });
-    proc.on("close", (code) => {
-      clearTimeout(timer);
-      if (code !== 0) {
-        reject(new Error(`ETF metrics fetcher exited ${code}: ${stderr.slice(0, 300)}`));
-        return;
-      }
-      let parsed;
-      try {
-        parsed = JSON.parse(stdout);
-      } catch {
-        reject(new Error(`ETF metrics fetcher returned invalid JSON: ${stdout.slice(0, 200)}`));
-        return;
-      }
-      if (!parsed.ok) reject(new Error(parsed.error));
-      else resolve(parsed.result);
-    });
-    proc.stdin.write(JSON.stringify({ tickers, target_dte: 30 }));
-    proc.stdin.end();
-  });
+  return runPython("etf_metrics", { tickers, target_dte: 30 }, { timeoutMs });
 }
 
 function createScreener({ store = defaultStore, fetchMetrics = fetchMetricsViaPython, now = Date.now } = {}) {

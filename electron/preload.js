@@ -3,7 +3,7 @@ const { contextBridge, ipcRenderer } = require("electron");
 // The renderer talks to the backend exclusively through this bridge.
 // The api:* channels are implemented in main.js during Phase 7; payload
 // shapes match docs/api-schema.md.
-contextBridge.exposeInMainWorld("optionsDetective", {
+contextBridge.exposeInMainWorld("optionObelisk", {
   detect: (payload) => ipcRenderer.invoke("api:detect", payload),
   calculate: (payload) => ipcRenderer.invoke("api:calculate", payload),
   recommend: (payload) => ipcRenderer.invoke("api:recommend", payload),
@@ -50,4 +50,15 @@ contextBridge.exposeInMainWorld("optionsDetective", {
   icsHoldings: (ticker) => ipcRenderer.invoke("api:ics:holdings", { ticker }),
   icsBatch: (payload) => ipcRenderer.invoke("api:ics:batch", payload),
   marketPulse: (watch) => ipcRenderer.invoke("api:market:pulse", { watch }),
+  archiveStatus: () => ipcRenderer.invoke("api:archive:status"),
+  archiveSnapshot: (body) => ipcRenderer.invoke("api:archive:snapshot", body),
+  archiveSettings: (body) => ipcRenderer.invoke("api:archive:settings", body),
+  dataProviders: () => ipcRenderer.invoke("api:data:providers"),
+  dataProvidersUpdate: (body) => ipcRenderer.invoke("api:data:providers:update", body),
+  dataRatesRefresh: () => ipcRenderer.invoke("api:data:rates:refresh"),
+  researchStrategies: () => ipcRenderer.invoke("api:research:strategies"),
+  researchRuns: () => ipcRenderer.invoke("api:research:runs"),
+  researchBacktest: (body) => ipcRenderer.invoke("api:research:backtest", body),
+  researchWalkforward: (body) => ipcRenderer.invoke("api:research:walkforward", body),
+  secretsStatus: () => ipcRenderer.invoke("api:secrets:status"),
 });

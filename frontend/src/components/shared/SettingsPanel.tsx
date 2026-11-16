@@ -8,6 +8,7 @@ import {
   AppearanceTab, CustomizationTab, SidebarTab, CurrencyTab, ScoringTab,
   ComplexityTab, TemplatesTab, AlertsTab, AccountTab,
 } from "./SettingsTabs";
+import { DataTab } from "./SettingsDataTab";
 
 interface SettingsPanelProps {
   open: boolean;
@@ -21,7 +22,7 @@ interface SettingsPanelProps {
 // (v1.10.2) and the sections inside each tab stagger in 50ms apart.
 // Selection applies instantly and persists.
 
-export type TabId = "appearance" | "customization" | "sidebar" | "currency" | "scoring" | "complexity" | "templates" | "alerts" | "account";
+export type TabId = "appearance" | "customization" | "sidebar" | "currency" | "data" | "scoring" | "complexity" | "templates" | "alerts" | "account";
 
 // alphabetical by label (v1.10.4) for predictable scanning
 const SETTINGS_TABS: Array<{ id: TabId; label: string }> = [
@@ -31,6 +32,7 @@ const SETTINGS_TABS: Array<{ id: TabId; label: string }> = [
   { id: "complexity", label: "Complexity" },
   { id: "currency", label: "Currency" },
   { id: "customization", label: "Customization" },
+  { id: "data", label: "Data" },
   { id: "scoring", label: "Scoring" },
   { id: "sidebar", label: "Sidebar" },
   { id: "templates", label: "Templates" },
@@ -110,6 +112,7 @@ export default function SettingsPanel({ open, onClose, openTab }: SettingsPanelP
           {tab === "customization" && <CustomizationTab />}
           {tab === "sidebar" && <SidebarTab />}
           {tab === "currency" && <CurrencyTab />}
+          {tab === "data" && <DataTab />}
           {tab === "scoring" && <ScoringTab />}
           {tab === "complexity" && <ComplexityTab />}
           {tab === "templates" && <TemplatesTab />}

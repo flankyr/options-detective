@@ -7,6 +7,8 @@ import { Badge, Card, CardContent, CardFooter, CardHeader, MetricBox } from "./u
 import CountUp from "./ui/CountUp";
 import { FormInput, FormSelect } from "./ui/Input";
 import FilterPanel from "./shared/FilterPanel";
+import ModeSwitch from "./shared/ModeSwitch";
+import ScreenContextBanner from "./shared/ScreenContextBanner";
 import ScoreBreakdown from "./shared/ScoreBreakdown";
 import SortControl from "./shared/SortControl";
 import { DetectorSkeleton } from "./shared/Skeleton";
@@ -69,6 +71,7 @@ export default function Detector() {
     symbol: st.symbol, filters: st.filters, sort: st.sort, status: st.status,
     screenResult: st.screenResult, weights: st.weights, capital: st.capital,
     definedRiskOnly: st.definedRiskOnly, directionalView: st.directionalView,
+    screenMode: st.screenMode, conviction: st.conviction, setScreenMode: st.setScreenMode,
     screen: st.screen, recommend: st.recommend, openCandidate: st.openCandidate,
     patchFilters: st.patchFilters, clearFilters: st.clearFilters,
     setIntent: st.setIntent, setSort: st.setSort, setView: st.setView,
@@ -121,6 +124,9 @@ export default function Detector() {
           error={s.capital < 1000 ? "at least $1,000" : undefined}
           data-testid="capital-input"
         />
+        <ModeSwitch mode={s.screenMode} conviction={s.conviction} view={s.directionalView}
+          onMode={(mode) => s.setScreenMode({ screenMode: mode })}
+          onConviction={(conviction) => s.setScreenMode({ conviction })} />
         <label className="flex items-center gap-2 pb-3 text-sm text-content-2"
           title="Exclude strategies whose loss is theoretically unlimited (e.g. short strangles)">
           <input
@@ -191,19 +197,21 @@ export default function Detector() {
             </span>
           </div>
 
+          <ScreenContextBanner result={result} />
+
           {result.warnings.map((w) => (
             <div key={w} className="rounded-md border border-amber-800 bg-amber-950/50 px-4 py-2 text-sm text-amber-200">
               ⚠ {w}
             </div>
           ))}
 
-          {expertMode && result.ivBand === "high" && (
+          {expertMode && !result.vrp && result.ivBand === "high" && (
             <div className="rounded-md border border-accent-blue/30 bg-accent-blue/10 px-4 py-2 text-sm text-accent-blue">
               <span className="emoji-icon">💡</span> IV rank {result.ivRank} is high, options are expensive right now, so the
               screen favors premium-selling structures (condors, strangles, covered calls).
             </div>
           )}
-          {expertMode && result.ivBand === "low" && (
+          {expertMode && !result.vrp && result.ivBand === "low" && (
             <div className="rounded-md border border-accent-blue/30 bg-accent-blue/10 px-4 py-2 text-sm text-accent-blue">
               <span className="emoji-icon">💡</span> IV rank {result.ivRank} is low, options are cheap right now, so the screen
               favors long-volatility structures (straddles) and debit spreads.

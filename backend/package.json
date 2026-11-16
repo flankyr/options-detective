@@ -1,14 +1,17 @@
 {
-  "name": "options-detective-backend",
-  "version": "1.10.6",
+  "name": "option-obelisk-backend",
+  "version": "2.2.0",
   "private": true,
-  "description": "Express API + Python math engine bridge for Options Detective",
+  "description": "Express API + Python math engine bridge for Option Obelisk",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
     "dev": "node --watch server.js",
     "test": "node --test",
-    "build:math": "math\\.venv\\Scripts\\pyinstaller.exe --noconfirm --clean --onedir --console --name od-math --distpath math/dist --workpath math/build --specpath math math/od_math.py"
+    "build:math": "math\\.venv\\Scripts\\pyinstaller.exe --noconfirm --clean --onedir --console --name od-math --distpath math/dist --workpath math/build --specpath math math/od_math.py",
+    "lint": "eslint .",
+    "format": "prettier --write \"**/*.js\"",
+    "format:check": "prettier --check \"**/*.js\""
   },
   "engines": {
     "node": ">=18"
@@ -16,5 +19,11 @@
   "dependencies": {
     "cors": "^2.8.5",
     "express": "^5.1.0"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.9.0",
+    "eslint": "^9.9.0",
+    "globals": "^15.9.0",
+    "prettier": "^3.3.3"
   }
 }

@@ -53,6 +53,16 @@ type Bridge = {
   icsHoldings?: (ticker: string) => Promise<HoldingsInfo>;
   icsBatch?: (body: unknown) => Promise<IcsResult>;
   marketPulse?: (watch: string) => Promise<MarketPulse>;
+  archiveStatus?: () => Promise<ArchiveStatus>;
+  archiveSnapshot?: (body: { force?: boolean; symbols?: string[] }) => Promise<ArchiveRunResult>;
+  archiveSettings?: (body: Partial<ArchiveSettings>) => Promise<ArchiveSettings>;
+  dataProviders?: () => Promise<DataProvidersStatus>;
+  dataProvidersUpdate?: (body: DataProvidersPatch) => Promise<DataProvidersStatus>;
+  dataRatesRefresh?: () => Promise<RatesInfo>;
+  researchStrategies?: () => Promise<StrategyInfo[]>;
+  researchRuns?: () => Promise<ResearchRunSummary[]>;
+  researchBacktest?: (body: BacktestRequest) => Promise<BacktestResult>;
+  researchWalkforward?: (body: WalkforwardRequest) => Promise<WalkforwardResult>;
 };
 
 // v1.5.0: process() now also returns assignment events + holdings snapshot
@@ -85,8 +95,111 @@ export interface AccountBackup {
   prefs?: Record<string, string>;
 }
 
+// Phase 0: chain archive
+export interface ArchiveSettings {
+  enabled: boolean;
+  extraSymbols: string[];
+  maxExpirations: number;
+}
+export interface ArchiveRunResult {
+  ok: boolean;
+  at?: string;
+  date?: string;
+  written?: Array<{ symbol: string; rows: number }>;
+  skipped?: string[];
+  errors?: Record<string, string>;
+  error?: string;
+}
+export interface ArchiveStatus {
+  settings: ArchiveSettings;
+  root: string;
+  watchlist: string[];
+  tradingDate: string;
+  missingToday: string[];
+  running: boolean;
+  last: ArchiveRunResult | null;
+  symbols: Record<string, { days: number; first: string | null; last: string | null; bytes: number }>;
+}
+
+// Phase 1: data platform
+export interface ProviderCapabilities {
+  live: boolean;
+  historical: boolean;
+  delayed_minutes: number;
+  has_greeks: boolean;
+  has_open_interest: boolean;
+  has_volume: boolean;
+  history_depth_days: number;
+  license_note: string;
+}
+export interface RatesInfo {
+  source: string | null;
+  date: string | null;
+  fetchedOn: string | null;
+  lastError: string | null;
+  points: number;
+}
+export interface DataProvidersStatus {
+  root: string;
+  liveOrder: string[];
+  historicalOrder: string[];
+  providers: Array<{ name: string; configured: boolean; capabilities: ProviderCapabilities }>;
+  rates: RatesInfo;
+  config: Record<string, unknown>;
+  archiveSymbols: Record<string, { days: number; first: string | null; last: string | null; bytes: number }>;
+}
+export interface DataProvidersPatch {
+  massiveApiKey?: string;
+  liveOrder?: string[];
+  historicalOrder?: string[];
+}
+
+// Phase 5: simulator / research
+export interface StrategyInfo { name: string; params: Record<string, unknown>; doc: string }
+export interface BacktestConfig {
+  symbol: string; start: string; end: string; initialCapital: number;
+  screenEvery?: number; forecastMethod?: string; forecastHorizon?: number; useForecast?: boolean;
+  maxExpirations?: number; minDTE?: number; maxDTE?: number;
+}
+export interface BacktestRequest { strategy: string; params: Record<string, unknown>; config: BacktestConfig }
+export interface BacktestTrade {
+  id: string; structure: string; symbol: string; opened: string; closed: string; expiration: string;
+  reason: string; contracts: number; entryCost: number; exitValue: number; costs: number; pnl: number;
+  pnlPerUnit: number; daysHeld: number; mae: number; mfe: number;
+  predictedPop: number | null; predictedEv: number | null; predictedCvar: number | null;
+  predictedPopMarket: number | null; predictedEvMarket: number | null; meta: Record<string, unknown>;
+}
+export interface BacktestMetrics {
+  days: number; trades: number; totalReturn?: number; cagr: number | null; annualVol?: number;
+  sharpe: number | null; sortino: number | null; maxDrawdown: number | null; calmar: number | null;
+  winRate?: number | null; profitFactor?: number | null; avgWin?: number | null; avgLoss?: number | null;
+  tailRatio?: number | null; expectancy?: number | null; totalCosts?: number; avgDaysHeld?: number | null;
+  turnover?: number; sharpeCI?: [number, number] | null; finalEquity?: number;
+}
+export interface CalibrationBucket { bucket: string; n: number; predicted: number; realized: number }
+export interface Reliability { buckets: CalibrationBucket[]; brier: number | null; n: number }
+export interface Calibration {
+  n: number; pop: Reliability | null; popMarket: Reliability | null;
+  ev: { n: number; meanPredicted: number; meanRealized: number; bias: number; slope: number | null; intercept: number | null; r2: number | null } | null;
+}
+export interface BacktestResult {
+  strategy: StrategyInfo; config: BacktestConfig & Record<string, unknown>;
+  curve: Array<{ date: string; equity: number; cash: number; open: number; spot: number }>;
+  trades: BacktestTrade[]; skippedDays: Array<{ date: string; error: string }>;
+  metrics: BacktestMetrics; calibration: Calibration; elapsedSeconds?: number; savedTo?: string;
+}
+export interface ResearchRunSummary { file: string; strategy: string | null; config: Record<string, unknown>; metrics: BacktestMetrics | null }
+export interface WalkforwardRequest {
+  strategy: string; grid: Array<Record<string, unknown>>; config: BacktestConfig;
+  trainDays?: number; testDays?: number; objective?: string;
+}
+export interface WalkforwardResult {
+  windows: Array<{ train: [string, string]; test: [string, string]; params: Record<string, unknown>; trainObjective: number; testMetrics: BacktestMetrics | null }>;
+  stitchedCurve: BacktestResult["curve"]; objective: string; savedTo?: string;
+}
+
 function bridge(): Bridge | null {
-  return (window as { optionsDetective?: Bridge }).optionsDetective ?? null;
+  return (window as { optionObelisk?: Bridge }).optionObelisk ?? null;
 }
 
 async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
@@ -253,6 +366,37 @@ export const api = {
   },
   icsBatch(body: { etf: string; constraints?: IcsConstraints; refresh?: boolean }): Promise<IcsResult> {
     return bridge()?.icsBatch?.(body) ?? post<IcsResult>("/screener/batch", body);
+  },
+  // Phase 0 chain archive
+  archiveStatus(): Promise<ArchiveStatus> {
+    return bridge()?.archiveStatus?.() ?? request("GET", "/archive/status");
+  },
+  archiveSnapshot(body: { force?: boolean; symbols?: string[] }): Promise<ArchiveRunResult> {
+    return bridge()?.archiveSnapshot?.(body) ?? post("/archive/snapshot", body);
+  },
+  archiveSettings(body: Partial<ArchiveSettings>): Promise<ArchiveSettings> {
+    return bridge()?.archiveSettings?.(body) ?? request("PUT", "/archive/settings", body);
+  },
+  dataProviders(): Promise<DataProvidersStatus> {
+    return bridge()?.dataProviders?.() ?? request("GET", "/data/providers");
+  },
+  dataProvidersUpdate(body: DataProvidersPatch): Promise<DataProvidersStatus> {
+    return bridge()?.dataProvidersUpdate?.(body) ?? request("PUT", "/data/providers", body);
+  },
+  dataRatesRefresh(): Promise<RatesInfo> {
+    return bridge()?.dataRatesRefresh?.() ?? post("/data/rates/refresh", {});
+  },
+  researchStrategies(): Promise<StrategyInfo[]> {
+    return bridge()?.researchStrategies?.() ?? request("GET", "/research/strategies");
+  },
+  researchRuns(): Promise<ResearchRunSummary[]> {
+    return bridge()?.researchRuns?.() ?? request("GET", "/research/runs");
+  },
+  researchBacktest(body: BacktestRequest): Promise<BacktestResult> {
+    return bridge()?.researchBacktest?.(body) ?? post("/research/backtest", body);
+  },
+  researchWalkforward(body: WalkforwardRequest): Promise<WalkforwardResult> {
+    return bridge()?.researchWalkforward?.(body) ?? post("/research/walkforward", body);
   },
   marketPulse(watch: string[]): Promise<MarketPulse> {
     const joined = watch.join(",");
