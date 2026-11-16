@@ -318,3 +318,27 @@ def test_service_history_and_forecast(tmp_path):
     assert datasvc.handle({"cmd": "forecast", "symbol": "SPY", "horizon": 21, "method": "ewma"}, svc)["ok"]
     with pytest.raises(Unsupported):
         make_service(tmp_path, [Fake("yfinance", True, False, result=fake_live_payload())]).underlying_history("SPY")
+
+
+def test_archive_rows_with_nan_text_cells_regression():
+    """Newer pandas reads empty text cells back from parquet as NaN (a truthy
+    float). The provider must treat them as missing, not compare them to strings."""
+    nan = float("nan")
+    rows = [
+        {"symbol": "SPY", "asof": "2026-11-13", "expiration": "2026-11-20", "type": "call", "strike": 500.0,
+         "bid": 5.0, "ask": 5.2, "mid": 5.1, "volume": 10, "openInterest": 20, "impliedVolatility": 0.2,
+         "spreadPct": 0.04, "lastTradeAt": "2026-11-13T20:59:00+00:00", "underlyingClose": 500.0,
+         "atmIv": nan, "fetchedAt": "2026-11-13T21:30:00+00:00"},
+        {"symbol": "SPY", "asof": "2026-11-13", "expiration": "2026-11-20", "type": "put", "strike": 500.0,
+         "bid": 4.8, "ask": 5.0, "mid": 4.9, "volume": nan, "openInterest": nan, "impliedVolatility": nan,
+         "spreadPct": nan, "lastTradeAt": nan, "underlyingClose": 500.0, "atmIv": nan, "fetchedAt": nan},
+    ]
+    from data.archive_provider import payload_from_rows
+    p = payload_from_rows(rows, "SPY", ASOF, "archive", ArchiveProvider.capabilities, max_dte=400)
+    assert validate(p) == []
+    assert p["lastTradeAt"] == "2026-11-13T20:59:00+00:00"
+    put = p["chains"]["2026-11-20"]["puts"][0]
+    assert put["timestamp"] is None and put["volume"] is None and put["impliedVolatility"] is None
+    assert p["atmIv"] is not None and p["atmIv"] == p["atmIv"]  # recomputed from the chain, not NaN
+    import json
+    json.dumps(p, allow_nan=False)

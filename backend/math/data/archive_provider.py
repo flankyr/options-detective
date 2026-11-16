@@ -7,7 +7,7 @@ from datetime import date
 import archive
 
 from .base import Provider, Unsupported
-from .schema import Capabilities, finalize, make_contract
+from .schema import Capabilities, clean, finalize, make_contract
 
 
 class ArchiveProvider(Provider):
@@ -59,6 +59,13 @@ class ArchiveProvider(Provider):
                                  self.capabilities, max_expirations, min_dte, max_dte)
 
 
+def _text(value):
+    """A string cell, or None. Parquet round trips can turn an empty text cell
+    into NaN (a float, and truthy) depending on the pandas version, so
+    `if row.get(col)` is not a safe emptiness test."""
+    return value if isinstance(value, str) and value else None
+
+
 def payload_from_rows(rows, symbol, asof, provider, capabilities,
                       max_expirations=6, min_dte=1, max_dte=120):
     """Flat archive rows (archive.COLUMNS) -> schema v2 payload."""
@@ -72,7 +79,7 @@ def payload_from_rows(rows, symbol, asof, provider, capabilities,
             continue
         c = make_contract(r["strike"], r.get("bid"), r.get("ask"), r.get("mid"),
                           r.get("volume"), r.get("openInterest"), r.get("impliedVolatility"),
-                          r.get("lastTradeAt"))
+                          _text(r.get("lastTradeAt")))
         if c is None:
             continue
         side = "calls" if r["type"] == "call" else "puts"
@@ -89,9 +96,9 @@ def payload_from_rows(rows, symbol, asof, provider, capabilities,
         "symbol": symbol.upper(),
         "price": float(first["underlyingClose"]),
         "underlyingClose": float(first["underlyingClose"]),
-        "atmIv": first.get("atmIv"),
+        "atmIv": clean(first.get("atmIv")),
         "chains": chains,
-        "lastTradeAt": max((r["lastTradeAt"] for r in rows if r.get("lastTradeAt")), default=None),
-        "fetchedAt": first.get("fetchedAt"),
+        "lastTradeAt": max((t for t in (_text(r.get("lastTradeAt")) for r in rows) if t), default=None),
+        "fetchedAt": _text(first.get("fetchedAt")),
     }
     return finalize(payload, provider=provider, asof=asof.isoformat(), capabilities=capabilities)
